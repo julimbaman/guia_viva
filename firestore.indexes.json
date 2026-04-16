@@ -1,0 +1,96 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "pois",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cityCode", "order": "ASCENDING" },
+        { "fieldPath": "metadata.popularityRank", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "pois",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cityCode", "order": "ASCENDING" },
+        { "fieldPath": "tourCategories", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "rating", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "visited_pois",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "user_trips",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "user_trips",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "poi_suggestions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "votes", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "place_suggestions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "triggeredByUserId", "order": "ASCENDING" },
+        { "fieldPath": "triggeredAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "location_history",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cityCode", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "pois",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "gridId", "order": "ASCENDING" },
+        { "fieldPath": "types", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "pois",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cityCode", "order": "ASCENDING" },
+        { "fieldPath": "rating", "order": "DESCENDING" },
+        { "fieldPath": "visitInfo.entryFee.free", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "poi_grids",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cityCode", "order": "ASCENDING" },
+        { "fieldPath": "cacheExpiresAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

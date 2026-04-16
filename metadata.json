@@ -1,0 +1,7 @@
+{
+  "name": "Guía Viva",
+  "description": "Tu Guía Turístico Personal con IA. Descubre los secretos de tu ciudad mientras caminas con narraciones en tiempo real.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
