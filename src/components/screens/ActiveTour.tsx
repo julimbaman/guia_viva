@@ -20,51 +20,70 @@ export function ActiveTour({ tour, location, onStop }: ActiveTourProps) {
   const [poiIndex, setPoiIndex] = useState(0);
   const [completed, setCompleted] = useState(false);
   const { isProcessing, isSpeaking, narrations, addNarrationRecord, playNarration } = useNarration();
-  
+
   const currentPoi = tour?.pois[poiIndex];
   const hasNarratedRef = useRef<Set<number>>(new Set());
+  // True while we're waiting for TTS to finish before advancing to the next POI
+  const pendingAdvanceRef = useRef(false);
 
   useEffect(() => {
     TTS.init();
     return () => TTS.stop();
   }, []);
 
+  // Advance to the next POI once TTS finishes speaking
+  useEffect(() => {
+    if (!isSpeaking && pendingAdvanceRef.current) {
+      pendingAdvanceRef.current = false;
+      // Brief pause after narration ends before moving on
+      const t = setTimeout(() => {
+        if (poiIndex + 1 < tour.pois.length) {
+          setPoiIndex(prev => prev + 1);
+        } else {
+          setCompleted(true);
+          playNarration("¡Has completado el recorrido. Felicitaciones!");
+          // Save tour completion to Firestore
+          const user = auth.currentUser;
+          if (user) {
+            addDoc(collection(db, 'users', user.uid, 'visited_pois'), {
+              poiName: tour.title,
+              placeId: tour.id || `tour_${Date.now()}`,
+              lat: location.lat,
+              lng: location.lng,
+              narration: `Completed tour: ${tour.title}`,
+              timestamp: serverTimestamp(),
+            }).catch(() => {});
+          }
+        }
+      }, 1500);
+      return () => clearTimeout(t);
+    }
+  }, [isSpeaking, poiIndex, tour, location, playNarration]);
+
   useEffect(() => {
     if (!currentPoi || completed) return;
 
     const dist = calculateDistance(
-      location.lat, 
-      location.lng, 
-      currentPoi.location.latitude, 
+      location.lat,
+      location.lng,
+      currentPoi.location.latitude,
       currentPoi.location.longitude
     );
 
-    // If within 30 meters, we have arrived
     if (dist < 30 && !hasNarratedRef.current.has(poiIndex)) {
       hasNarratedRef.current.add(poiIndex);
-      
-      let text = `You have arrived at ${currentPoi.displayName?.text || 'your destination'}. `;
+
+      let text = `Has llegado a ${currentPoi.displayName?.text || 'tu destino'}. `;
       if (currentPoi.pregeneratedNarration) {
         text += currentPoi.pregeneratedNarration;
       } else if (currentPoi.editorialSummary?.text) {
         text += currentPoi.editorialSummary.text;
       }
-      
+
       addNarrationRecord(currentPoi, text);
       playNarration(text);
-      
-      // Move to next point after 5 seconds
-      setTimeout(() => {
-        if (poiIndex + 1 < tour.pois.length) {
-          setPoiIndex(prev => prev + 1);
-        } else {
-          setCompleted(true);
-          playNarration("You have completed the tour. Congratulations!");
-          
-          // Save group tour completion or just basic history? 
-          // For now, basic complete flag.
-        }
-      }, 5000);
+      // Signal the isSpeaking effect to advance once TTS finishes
+      pendingAdvanceRef.current = true;
     }
   }, [location, currentPoi, completed, poiIndex, tour.pois.length, addNarrationRecord, playNarration]);
 

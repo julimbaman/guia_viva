@@ -111,7 +111,7 @@ export function Countdown({ location, zoneName, config, fetchNearbyPlaces, fetch
 
       // 4. OpenAI POIs (using hook function for caching and Firebase saving)
       try {
-        const places = await fetchNearbyPlaces(location.lat, location.lng, 500, config.interests.length > 0 ? config.interests : undefined, zoneName, true);
+        const places = await fetchNearbyPlaces(location.lat, location.lng, 500, config.interests.length > 0 ? config.interests : undefined, zoneName, false);
         setDiagnostics(prev => prev.map(d => d.name === 'Google Places + OpenAI (Nearby POIs)' ? {
           name: 'Google Places + OpenAI (Nearby POIs)',
           status: places.length > 0 ? 'success' : 'error',
