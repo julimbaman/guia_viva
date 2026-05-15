@@ -54,6 +54,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
@@ -78,9 +82,14 @@ service cloud.firestore {
     // Domain Validators
     // ===============================================================
     function isValidUserProfile(data) {
-      let isBasicValid = hasRequiredFields(['displayName', 'email', 'createdAt']) &&
-        isValidString(data.displayName, 1, 100) &&
+      let isBasicValid = hasRequiredFields(['firstName', 'lastName', 'email', 'createdAt']) &&
+        isValidString(data.firstName, 1, 100) &&
+        isValidString(data.lastName, 1, 100) &&
         isValidEmail(data.email) &&
+        (!('mobileCountryCode' in data) || isValidString(data.mobileCountryCode, 0, 10)) &&
+        (!('mobileNumber' in data) || isValidString(data.mobileNumber, 0, 20)) &&
+        (!('displayName' in data) || isValidString(data.displayName, 0, 100)) &&
+        (!('onboardingComplete' in data) || data.onboardingComplete is bool) &&
         data.createdAt is timestamp;
         
       let isInterestsValid = !('interests' in data) || (data.interests is list && data.interests.size() <= 20);
@@ -119,6 +128,43 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidTourRoute(data) {
+      return hasRequiredFields(['title', 'creatorId', 'createdAt', 'pois', 'type']) &&
+        isValidString(data.title, 1, 100) &&
+        isValidString(data.creatorId, 1, 128) &&
+        data.createdAt is timestamp &&
+        data.pois is list &&
+        data.pois.size() <= 50 &&
+        data.type in ['personalized', 'system'] &&
+        (!('description' in data) || isValidString(data.description, 0, 500)) &&
+        (!('isPublic' in data) || data.isPublic is bool);
+    }
+    
+    function isValidGroup(data) {
+      return hasRequiredFields(['name', 'creatorId', 'createdAt']) &&
+        isValidString(data.name, 1, 100) &&
+        isValidString(data.creatorId, 1, 128) &&
+        data.createdAt is timestamp &&
+        (!('description' in data) || isValidString(data.description, 0, 500));
+    }
+    
+    function isValidGroupMember(data) {
+      return hasRequiredFields(['userId', 'role', 'joinedAt']) &&
+        isValidString(data.userId, 1, 128) &&
+        isValidString(data.role, 1, 20) &&
+        data.role in ['admin', 'member'] &&
+        data.joinedAt is timestamp;
+    }
+
+    function isValidGroupTour(data) {
+      return hasRequiredFields(['groupId', 'routeId', 'creatorId', 'status']) &&
+        isValidString(data.groupId, 1, 128) &&
+        isValidString(data.routeId, 1, 128) &&
+        isValidString(data.creatorId, 1, 128) &&
+        isValidString(data.status, 1, 50) &&
+        (!('scheduledAt' in data) || data.scheduledAt is timestamp);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -148,6 +194,10 @@ service cloud.firestore {
         allow update: if isOwner(userId) && isValidFavorite(request.resource.data) && isImmutable('savedAt');
         allow delete: if isOwner(userId);
       }
+      
+      match /api_usage/{dateId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     match /poi_grids/{gridId} {
@@ -155,6 +205,76 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isValidPOIGrid(request.resource.data);
       allow update: if isAuthenticated() && isValidPOIGrid(request.resource.data) && isImmutable('gridId');
+    }
+
+    match /tour_routes/{routeId} {
+      allow read: if isAuthenticated() && (
+        (!('isPublic' in resource.data) || resource.data.isPublic == true) || 
+        resource.data.creatorId == request.auth.uid ||
+        resource.data.type == 'system'
+      );
+      allow create: if isAuthenticated() && 
+                    isValidTourRoute(request.resource.data) && 
+                    request.resource.data.creatorId == request.auth.uid &&
+                    (request.resource.data.type == 'personalized' || (request.resource.data.type == 'system' && isAdmin()));
+      allow update: if isAuthenticated() &&
+                    isValidTourRoute(request.resource.data) &&
+                    (resource.data.creatorId == request.auth.uid || isAdmin()) &&
+                    (request.resource.data.type == 'personalized' || (request.resource.data.type == 'system' && isAdmin())) &&
+                    isImmutable('creatorId') &&
+                    isImmutable('createdAt') &&
+                    isImmutable('type');
+      allow delete: if isAuthenticated() && (resource.data.creatorId == request.auth.uid || isAdmin());
+    }
+
+    match /groups/{groupId} {
+      allow read: if isAuthenticated() && exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+      allow create: if isAuthenticated() && 
+                    isValidGroup(request.resource.data) && 
+                    request.resource.data.creatorId == request.auth.uid;
+      allow update: if isAuthenticated() &&
+                    isValidGroup(request.resource.data) &&
+                    isImmutable('creatorId') &&
+                    isImmutable('createdAt') &&
+                    exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)) &&
+                    get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin';
+      allow delete: if isAuthenticated() && resource.data.creatorId == request.auth.uid;
+
+      match /members/{memberId} {
+        allow read: if isAuthenticated() && exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+        allow create: if isAuthenticated() && isValidGroupMember(request.resource.data) &&
+                      request.resource.data.userId == memberId &&
+                      (request.auth.uid == memberId || (
+                        exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)) &&
+                        get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin'
+                      ));
+        allow update: if isAuthenticated() && isValidGroupMember(request.resource.data) &&
+                      isImmutable('userId') && isImmutable('joinedAt') &&
+                      exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)) &&
+                      get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin';
+        allow delete: if isAuthenticated() && (request.auth.uid == memberId || (
+                        exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)) &&
+                        get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin'
+                      ));
+      }
+    }
+
+    match /group_tours/{tourId} {
+      allow read: if isAuthenticated() && 
+                  exists(/databases/$(database)/documents/groups/$(resource.data.groupId)/members/$(request.auth.uid));
+      allow create: if isAuthenticated() &&
+                    isValidGroupTour(request.resource.data) &&
+                    request.resource.data.creatorId == request.auth.uid &&
+                    exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId)/members/$(request.auth.uid)) &&
+                    get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)/members/$(request.auth.uid)).data.role == 'admin';
+      allow update: if isAuthenticated() &&
+                    isValidGroupTour(request.resource.data) &&
+                    isImmutable('creatorId') && isImmutable('groupId') &&
+                    exists(/databases/$(database)/documents/groups/$(resource.data.groupId)/members/$(request.auth.uid)) &&
+                    get(/databases/$(database)/documents/groups/$(resource.data.groupId)/members/$(request.auth.uid)).data.role == 'admin';
+      allow delete: if isAuthenticated() &&
+                    exists(/databases/$(database)/documents/groups/$(resource.data.groupId)/members/$(request.auth.uid)) &&
+                    get(/databases/$(database)/documents/groups/$(resource.data.groupId)/members/$(request.auth.uid)).data.role == 'admin';
     }
   }
 }

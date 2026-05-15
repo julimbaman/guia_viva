@@ -1,7 +1,6 @@
-import { useState } from 'react';
-import { Play, Settings, LogIn, History, MapPin } from 'lucide-react';
+import { Compass, Settings, LogIn, History, MapPin, Route, Map as MapIcon } from 'lucide-react';
 import { LocationData } from '../../hooks/useGPS';
-import { AppConfig, ConfigPanel } from '../ConfigPanel';
+import { AppConfig } from '../ConfigPanel';
 import { signInWithGoogle } from '../../firebase';
 import { useHistory } from '../../hooks/useHistory';
 
@@ -11,10 +10,12 @@ interface HomeProps {
   config: AppConfig;
   onConfigChange: (config: AppConfig) => void;
   onStart: () => void;
+  onTourList: () => void;
+  onTourPlanner: () => void;
+  onSettings: () => void;
 }
 
-export function Home({ location, zoneName, config, onConfigChange, onStart }: HomeProps) {
-  const [showConfig, setShowConfig] = useState(false);
+export function Home({ location, zoneName, config, onConfigChange, onStart, onTourList, onTourPlanner, onSettings }: HomeProps) {
   const { userId, visitedPlaces } = useHistory();
 
   const handleSignIn = async () => {
@@ -31,7 +32,7 @@ export function Home({ location, zoneName, config, onConfigChange, onStart }: Ho
         <h1 className="text-5xl font-bold mb-2 tracking-tight">Guía Viva</h1>
         <p className="text-text/60 mb-12">Your intelligent real-time tour guide</p>
 
-        <div className="bg-surface/50 border border-white/10 rounded-3xl p-6 w-full mb-12">
+        <div className="bg-surface/50 border border-white/10 rounded-3xl p-6 w-full mb-8">
           <div className="flex items-center justify-center gap-2 mb-4">
             <div className="w-3 h-3 rounded-full bg-primary animate-pulse-dot"></div>
             <span className="text-primary font-bold tracking-widest text-sm">GPS ACTIVE</span>
@@ -51,14 +52,30 @@ export function Home({ location, zoneName, config, onConfigChange, onStart }: Ho
 
         <button 
           onClick={onStart}
-          className="w-full bg-primary text-bg font-bold text-xl py-5 rounded-full flex items-center justify-center gap-3 hover:bg-primary/90 transition-transform active:scale-95 shadow-[0_0_40px_rgba(34,211,167,0.3)] mb-6"
+          className="w-full bg-surface border border-white/10 text-white font-bold text-xl py-5 rounded-full flex items-center justify-center gap-3 hover:bg-white/5 transition-transform active:scale-95 mb-4 shadow-lg"
         >
-          <Play fill="currentColor" /> Start Guide
+          <Compass /> Discover your area
         </button>
+
+        <button 
+          onClick={onTourList}
+          className="w-full bg-primary text-bg font-bold text-xl py-5 rounded-full flex items-center justify-center gap-3 hover:bg-primary/90 transition-transform active:scale-95 shadow-[0_0_40px_rgba(34,211,167,0.3)] mb-4"
+        >
+          <MapIcon /> Experience a guided tour
+        </button>
+
+        {userId && (
+          <button 
+            onClick={onTourPlanner}
+            className="w-full bg-surface border border-primary/30 text-primary font-bold text-lg py-4 rounded-full flex items-center justify-center gap-3 hover:bg-white/5 transition-transform active:scale-95 mb-6"
+          >
+            <Route size={20} /> Create Tour Route
+          </button>
+        )}
 
         <div className="flex gap-4 w-full">
           <button 
-            onClick={() => setShowConfig(true)}
+            onClick={onSettings}
             className="flex-1 bg-surface border border-white/10 py-4 rounded-2xl flex items-center justify-center gap-2 font-medium hover:bg-white/5 transition-colors"
           >
             <Settings size={18} /> Settings
@@ -78,14 +95,6 @@ export function Home({ location, zoneName, config, onConfigChange, onStart }: Ho
           )}
         </div>
       </div>
-
-      {showConfig && (
-        <ConfigPanel 
-          config={config} 
-          onChange={onConfigChange} 
-          onClose={() => setShowConfig(false)} 
-        />
-      )}
     </div>
   );
 }

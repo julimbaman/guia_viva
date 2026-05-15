@@ -13,6 +13,7 @@ import { NavigationBanner } from '../NavigationBanner';
 import { getTransportMode, getSearchRadius, getNarrationInterval } from '../../utils/movement';
 import { calculateDistance, getCardinalDirection, getRelativeDirection, projectFuturePosition } from '../../utils/geo';
 import { TTS } from '../../utils/tts';
+import { useApiTracker } from '../../hooks/useApiTracker';
 
 interface ActiveProps {
   location: LocationData;
@@ -21,9 +22,10 @@ interface ActiveProps {
   places: Place[];
   suggestions: Place[];
   fetchNearbyPlaces: (lat: number, lng: number, radius: number, types?: string[], currentZone?: string, force?: boolean) => Promise<any[]>;
-  fetchGoogleSuggestions: (lat: number, lng: number, radius: number) => Promise<void>;
+  fetchGoogleSuggestions: (lat: number, lng: number, radius: number, types?: string[]) => Promise<void>;
   onConfigChange: (config: AppConfig) => void;
   onStop: () => void;
+  onOpenDebug: () => void;
 }
 
 export function Active({ 
@@ -35,12 +37,14 @@ export function Active({
   fetchNearbyPlaces, 
   fetchGoogleSuggestions, 
   onConfigChange, 
-  onStop 
+  onStop,
+  onOpenDebug
 }: ActiveProps) {
   const [showConfig, setShowConfig] = useState(false);
   const [destination, setDestination] = useState<Place | null>(null);
   const { isProcessing, isSpeaking, narrations, generateNarration, addNarrationRecord, playNarration, stopNarration } = useNarration();
   const { addVisit, hasVisitedRecently } = useHistory();
+  const { reachedDailyLimit } = useApiTracker();
   
   const mode = getTransportMode(location.speed);
   const lastNarrationTime = useRef<number>(0);
@@ -50,6 +54,8 @@ export function Active({
   const localVisitedRef = useRef<Set<string>>(new Set());
 
   const [rateLimitWarning, setRateLimitWarning] = useState(false);
+  const [dailyLimitWarning, setDailyLimitWarning] = useState(false);
+  
   const wasSpeaking = useRef(false);
 
   // Initialize TTS
@@ -76,11 +82,16 @@ export function Active({
   }, [onStop]);
 
   const checkRateLimit = () => {
+    if (reachedDailyLimit) {
+      setDailyLimitWarning(true);
+      return false; // Daily limit reached
+    }
+    
     const now = Date.now();
     // Keep only timestamps from the last 60 seconds
     apiCallTimestamps.current = apiCallTimestamps.current.filter(t => now - t < 60000);
-    if (apiCallTimestamps.current.length >= 3) {
-      return false; // Rate limit exceeded
+    if (apiCallTimestamps.current.length >= 10) { // Changed limit from 3 to 10
+      return false; // Rate limit exceeded (10 per minute)
     }
     apiCallTimestamps.current.push(now);
     return true;
@@ -198,7 +209,7 @@ export function Active({
   const hasInitialDiscovery = useRef(false);
   useEffect(() => {
     // Fetch suggestions from Google Places API
-    fetchGoogleSuggestions(location.lat, location.lng, getSearchRadius(mode));
+    fetchGoogleSuggestions(location.lat, location.lng, getSearchRadius(mode), config.interests.length > 0 ? config.interests : undefined);
 
     if (!hasInitialDiscovery.current) {
       hasInitialDiscovery.current = true;
@@ -210,7 +221,7 @@ export function Active({
     }, 5000); // Check every 5s
     
     return () => clearInterval(timerId);
-  }, [location.lat, location.lng, mode, config.narrationInterval, config.routeLookahead, fetchNearbyPlaces, fetchGoogleSuggestions]);
+  }, [location.lat, location.lng, mode, config.interests, config.narrationInterval, config.routeLookahead, fetchNearbyPlaces, fetchGoogleSuggestions]);
 
   // Check if arrived at destination
   useEffect(() => {
@@ -264,8 +275,13 @@ export function Active({
   return (
     <div className="h-screen flex flex-col max-w-md mx-auto bg-bg relative overflow-hidden">
       {rateLimitWarning && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-red-500/90 text-white px-4 py-2 rounded-full text-sm font-medium z-50 animate-fade-in shadow-lg whitespace-nowrap">
-          Límite de consultas (máx 3 por minuto). Espera un momento.
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-amber-500/90 text-white px-4 py-2 rounded-full text-sm font-medium z-50 animate-fade-in shadow-lg whitespace-nowrap">
+          Límite de consultas (máx 10 por minuto). Espera un momento.
+        </div>
+      )}
+      {dailyLimitWarning && (
+        <div className="absolute top-36 left-1/2 -translate-x-1/2 bg-red-500/90 text-white px-4 py-3 rounded-xl text-center text-sm font-medium z-50 animate-fade-in shadow-lg w-10/12">
+          Has alcanzado el límite diario (100 consultas max). Continúa explorando gratis desde caché o vuelve mañana.
         </div>
       )}
 
@@ -372,6 +388,10 @@ export function Active({
           config={config} 
           onChange={onConfigChange} 
           onClose={() => setShowConfig(false)} 
+          onOpenDebug={() => {
+            setShowConfig(false);
+            onOpenDebug();
+          }}
         />
       )}
     </div>

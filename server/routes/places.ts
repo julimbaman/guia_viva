@@ -20,11 +20,36 @@ router.post('/nearby', async (req, res) => {
     const searchUrl = 'https://places.googleapis.com/v1/places:searchNearby';
     
     // Map frontend interests to valid Google Places types
-    const validGoogleTypes = ['tourist_attraction', 'historical_landmark', 'museum', 'park', 'church', 'art_gallery', 'restaurant', 'cafe'];
-    
-    const requestBody = {
-      includedTypes: validGoogleTypes,
-      maxResultCount: 10,
+    const INTEREST_TYPE_MAP: Record<string, string[]> = {
+      'History': ['historical_landmark', 'museum', 'church'],
+      'Architecture': ['historical_landmark', 'church', 'city_hall'],
+      'Food': ['restaurant', 'cafe', 'bakery'],
+      'Art': ['art_gallery', 'museum', 'performing_arts_theater'],
+      'Nature': ['park', 'national_park', 'botanical_garden'],
+      'Culture': ['museum', 'tourist_attraction', 'art_gallery']
+    };
+
+    let includedTypes: string[] = [];
+    if (types && Array.isArray(types) && types.length > 0) {
+      types.forEach((t: string) => {
+        if (INTEREST_TYPE_MAP[t]) {
+          includedTypes.push(...INTEREST_TYPE_MAP[t]);
+        } else {
+          // If the type from frontend is already a Google type (fallback)
+          includedTypes.push(t);
+        }
+      });
+      includedTypes = [...new Set(includedTypes)];
+    }
+
+    if (includedTypes.length === 0) {
+      includedTypes = ['tourist_attraction', 'historical_landmark', 'museum', 'park', 'church', 'art_gallery'];
+    }
+
+    const requestBody: any = {
+      includedTypes: includedTypes.slice(0, 50), // API allows up to 50 types
+      excludedTypes: ['supermarket', 'grocery_store', 'convenience_store', 'liquor_store', 'car_repair', 'car_dealer', 'shopping_mall'],
+      maxResultCount: 15, // increased to get more variety, we will filter
       locationRestriction: {
         circle: {
           center: { latitude: Number(lat), longitude: Number(lng) },
@@ -38,7 +63,7 @@ router.post('/nearby', async (req, res) => {
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': googleApiKey,
-        'X-Goog-FieldMask': 'places.id,places.displayName,places.types,places.rating,places.userRatingCount,places.location,places.photos,places.editorialSummary,places.regularOpeningHours'
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.types,places.rating,places.userRatingCount,places.location,places.photos,places.editorialSummary,places.regularOpeningHours'
       },
       body: JSON.stringify(requestBody)
     });
@@ -93,8 +118,7 @@ Return ONLY a valid JSON object where keys are the place IDs and values are the 
         const completion = await openai.chat.completions.create({
           model: model,
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.7,
-          response_format: { type: "json_object" }
+          temperature: 0.7
         });
 
         let content = completion.choices[0]?.message?.content?.trim() || '{}';
@@ -122,9 +146,59 @@ Return ONLY a valid JSON object where keys are the place IDs and values are the 
   }
 });
 
+router.post('/search', async (req, res) => {
+  try {
+    const { query, lat, lng } = req.body;
+    if (!query) return res.status(400).json({ error: 'Missing query' });
+
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: 'Missing Google Maps API Key' });
+    }
+
+    const url = 'https://places.googleapis.com/v1/places:searchText';
+    const requestBody: any = {
+      textQuery: query,
+      maxResultCount: 10,
+    };
+    
+    // Optional location bias
+    if (lat && lng) {
+      requestBody.locationBias = {
+        circle: {
+          center: { latitude: Number(lat), longitude: Number(lng) },
+          radius: 50000.0 // 50km
+        }
+      };
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.types,places.rating,places.userRatingCount,places.location,places.photos,places.editorialSummary'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Google Places API Error (SearchText):', response.status, JSON.stringify(errorData, null, 2));
+      return res.status(500).json({ error: 'Failed to search places' });
+    }
+
+    const data = await response.json();
+    res.json(data || { places: [] });
+  } catch (error) {
+    console.error('TextSearch route error:', error);
+    res.json({ places: [] });
+  }
+});
+
 router.post('/suggestions', async (req, res) => {
   try {
-    const { lat, lng, radius } = req.body;
+    const { lat, lng, radius, types } = req.body;
     if (!lat || !lng) return res.status(400).json({ error: 'Missing lat or lng' });
 
     const apiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -134,8 +208,35 @@ router.post('/suggestions', async (req, res) => {
     }
 
     const url = 'https://places.googleapis.com/v1/places:searchNearby';
-    const requestBody = {
-      includedTypes: ['tourist_attraction', 'restaurant', 'cafe', 'park', 'museum', 'historical_landmark'],
+    
+    const INTEREST_TYPE_MAP: Record<string, string[]> = {
+      'History': ['historical_landmark', 'museum', 'church'],
+      'Architecture': ['historical_landmark', 'church', 'city_hall'],
+      'Food': ['restaurant', 'cafe', 'bakery'],
+      'Art': ['art_gallery', 'museum', 'performing_arts_theater'],
+      'Nature': ['park', 'national_park', 'botanical_garden'],
+      'Culture': ['museum', 'tourist_attraction', 'art_gallery']
+    };
+
+    let includedTypes: string[] = [];
+    if (types && Array.isArray(types) && types.length > 0) {
+      types.forEach((t: string) => {
+        if (INTEREST_TYPE_MAP[t]) {
+          includedTypes.push(...INTEREST_TYPE_MAP[t]);
+        } else {
+          includedTypes.push(t);
+        }
+      });
+      includedTypes = [...new Set(includedTypes)];
+    }
+
+    if (includedTypes.length === 0) {
+      includedTypes = ['tourist_attraction', 'historical_landmark', 'museum', 'park', 'church', 'art_gallery'];
+    }
+
+    const requestBody: any = {
+      includedTypes: includedTypes.slice(0, 50),
+      excludedTypes: ['supermarket', 'grocery_store', 'convenience_store', 'liquor_store', 'car_repair', 'car_dealer', 'shopping_mall'],
       maxResultCount: 5,
       locationRestriction: {
         circle: {

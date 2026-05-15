@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, Volume2, VolumeX, X } from 'lucide-react';
+import { Settings, Volume2, VolumeX, X, Terminal, ExternalLink } from 'lucide-react';
 
 export interface AppConfig {
   interests: string[];
@@ -12,11 +12,12 @@ interface ConfigPanelProps {
   config: AppConfig;
   onChange: (newConfig: AppConfig) => void;
   onClose: () => void;
+  onOpenDebug: () => void;
 }
 
 const AVAILABLE_INTERESTS = ['History', 'Architecture', 'Food', 'Art', 'Nature', 'Culture'];
 
-export function ConfigPanel({ config, onChange, onClose }: ConfigPanelProps) {
+export function ConfigPanel({ config, onChange, onClose, onOpenDebug }: ConfigPanelProps) {
   const toggleInterest = (interest: string) => {
     const newInterests = config.interests.includes(interest)
       ? config.interests.filter(i => i !== interest)
@@ -25,7 +26,7 @@ export function ConfigPanel({ config, onChange, onClose }: ConfigPanelProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-bg/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+    <div className="fixed inset-0 bg-bg/80 backdrop-blur-sm z-[9999] flex items-end sm:items-center justify-center p-4">
       <div className="bg-surface w-full max-w-md rounded-3xl p-6 border border-white/10 shadow-2xl animate-fade-up">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold flex items-center gap-2">
@@ -97,6 +98,22 @@ export function ConfigPanel({ config, onChange, onClose }: ConfigPanelProps) {
               onChange={(e) => onChange({ ...config, routeLookahead: parseInt(e.target.value) })}
               className="w-full accent-primary"
             />
+          </div>
+
+          <div className="pt-4 border-t border-white/5">
+            <button
+              onClick={onOpenDebug}
+              className="w-full flex items-center justify-between p-4 rounded-xl bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <Terminal size={18} />
+                <div className="text-left">
+                  <p className="font-bold text-sm">Raw Results Explorer</p>
+                  <p className="text-[10px] opacity-70">Evaluate AI selection logic</p>
+                </div>
+              </div>
+              <ExternalLink size={16} />
+            </button>
           </div>
         </div>
       </div>

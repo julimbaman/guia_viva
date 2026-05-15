@@ -21,7 +21,11 @@
       "description": "User profile and travel preferences",
       "type": "object",
       "properties": {
-        "name": { "type": "string" },
+        "displayName": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "mobileCountryCode": { "type": "string" },
+        "mobileNumber": { "type": "string" },
         "email": { "type": "string", "format": "email" },
         "photoUrl": { "type": "string" },
         "preferredLanguage": { "type": "string" },
@@ -37,9 +41,10 @@
         "totalPOIsVisited": { "type": "number" },
         "totalDistanceWalkedKm": { "type": "number" },
         "memberSince": { "type": "string", "format": "date-time" },
-        "currentLocation": { "type": "object" }
+        "currentLocation": { "type": "object" },
+        "onboardingComplete": { "type": "boolean" }
       },
-      "required": ["email"]
+      "required": ["email", "firstName", "lastName"]
     },
     "LocationHistory": {
       "title": "LocationHistory",
@@ -155,6 +160,68 @@
         "acceptedPlaceId": { "type": "string" }
       },
       "required": ["triggeredByUserId", "triggeredAt", "userCurrentLocation", "suggestions"]
+    },
+    "ApiUsage": {
+      "title": "ApiUsage",
+      "description": "Tracks daily API calls for rate limiting",
+      "type": "object",
+      "properties": {
+        "googlePlaces": { "type": "number" },
+        "openAI": { "type": "number" },
+        "lastCallAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["googlePlaces", "openAI"]
+    },
+    "TourRoute": {
+      "title": "TourRoute",
+      "description": "A curated set of POIs forming a route",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "pois": { "type": "array", "items": { "type": "object" } },
+        "isPublic": { "type": "boolean" },
+        "type": { "type": "string", "enum": ["personalized", "system"] }
+      },
+      "required": ["title", "creatorId", "createdAt", "pois", "type"]
+    },
+    "Group": {
+      "title": "Group",
+      "description": "A group of users",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "creatorId", "createdAt"]
+    },
+    "GroupMember": {
+      "title": "GroupMember",
+      "description": "A member of a group",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "role": { "type": "string" },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "role", "joinedAt"]
+    },
+    "GroupTour": {
+      "title": "GroupTour",
+      "description": "A vinculation of a group and a route",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "routeId": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "scheduledAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string" }
+      },
+      "required": ["groupId", "routeId", "creatorId", "status"]
     }
   },
   "firestore": {
@@ -197,6 +264,26 @@
     "/place_suggestions/{suggestionId}": {
       "schema": { "$ref": "#/entities/PlaceSuggestion" },
       "description": "Proactive suggestions for users"
+    },
+    "/users/{userId}/api_usage/{dateId}": {
+      "schema": { "$ref": "#/entities/ApiUsage" },
+      "description": "Daily API usage tracking per user"
+    },
+    "/tour_routes/{routeId}": {
+      "schema": { "$ref": "#/entities/TourRoute" },
+      "description": "Tour routes containing POIs"
+    },
+    "/groups/{groupId}": {
+      "schema": { "$ref": "#/entities/Group" },
+      "description": "User groups"
+    },
+    "/groups/{groupId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/GroupMember" },
+      "description": "Members of a group"
+    },
+    "/group_tours/{tourId}": {
+      "schema": { "$ref": "#/entities/GroupTour" },
+      "description": "Tours assigned to groups"
     }
   }
 }

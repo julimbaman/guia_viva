@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { LocationData } from '../../hooks/useGPS';
 
+import { AppConfig } from '../ConfigPanel';
+
 interface CountdownProps {
   location: LocationData;
   zoneName: string;
+  config: AppConfig;
   fetchNearbyPlaces: (lat: number, lng: number, radius: number, types?: string[], currentZone?: string, force?: boolean) => Promise<any[]>;
-  fetchGoogleSuggestions: (lat: number, lng: number, radius: number) => Promise<void>;
+  fetchGoogleSuggestions: (lat: number, lng: number, radius: number, types?: string[]) => Promise<void>;
   onComplete: () => void;
 }
 
@@ -15,7 +18,7 @@ interface DiagnosticResult {
   details: string;
 }
 
-export function Countdown({ location, zoneName, fetchNearbyPlaces, fetchGoogleSuggestions, onComplete }: CountdownProps) {
+export function Countdown({ location, zoneName, config, fetchNearbyPlaces, fetchGoogleSuggestions, onComplete }: CountdownProps) {
   const [count, setCount] = useState(10);
   const [diagnostics, setDiagnostics] = useState<DiagnosticResult[]>([
     { name: 'GPS Location', status: 'pending', details: 'Checking...' },
@@ -82,7 +85,9 @@ export function Countdown({ location, zoneName, fetchNearbyPlaces, fetchGoogleSu
       // 2. Geocoding
       try {
         const geoRes = await fetch(`/api/geocode?lat=${location.lat}&lng=${location.lng}`);
-        const geoData = await geoRes.json();
+        const text = await geoRes.text();
+        let geoData: any = { error: 'Invalid JSON' };
+        try { geoData = JSON.parse(text); } catch(e) {}
         setDiagnostics(prev => prev.map(d => d.name === 'Geocoding (Zone)' ? {
           name: 'Geocoding (Zone)',
           status: geoRes.ok ? 'success' : 'error',
@@ -94,7 +99,7 @@ export function Countdown({ location, zoneName, fetchNearbyPlaces, fetchGoogleSu
 
       // 3. Google Places (using hook function for caching)
       try {
-        await fetchGoogleSuggestions(location.lat, location.lng, 500);
+        await fetchGoogleSuggestions(location.lat, location.lng, 500, config.interests.length > 0 ? config.interests : undefined);
         setDiagnostics(prev => prev.map(d => d.name === 'Google Places (Suggestions)' ? {
           name: 'Google Places (Suggestions)',
           status: 'success',
@@ -106,7 +111,7 @@ export function Countdown({ location, zoneName, fetchNearbyPlaces, fetchGoogleSu
 
       // 4. OpenAI POIs (using hook function for caching and Firebase saving)
       try {
-        const places = await fetchNearbyPlaces(location.lat, location.lng, 500, undefined, zoneName, true);
+        const places = await fetchNearbyPlaces(location.lat, location.lng, 500, config.interests.length > 0 ? config.interests : undefined, zoneName, true);
         setDiagnostics(prev => prev.map(d => d.name === 'Google Places + OpenAI (Nearby POIs)' ? {
           name: 'Google Places + OpenAI (Nearby POIs)',
           status: places.length > 0 ? 'success' : 'error',
@@ -120,7 +125,7 @@ export function Countdown({ location, zoneName, fetchNearbyPlaces, fetchGoogleSu
     if (location.lat !== 0) {
       runDiagnostics();
     }
-  }, [location.lat, location.lng, zoneName, fetchNearbyPlaces, fetchGoogleSuggestions]);
+  }, [location.lat, location.lng, zoneName, config.interests, fetchNearbyPlaces, fetchGoogleSuggestions]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto">
