@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react';
 import { TTS } from '../utils/tts';
 import { Place } from './usePlaces';
 import { TransportMode } from '../utils/movement';
+import { useApiTracker } from './useApiTracker';
 
 export interface NarrationRecord {
   id: string;
@@ -16,6 +17,7 @@ export function useNarration() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [narrations, setNarrations] = useState<NarrationRecord[]>([]);
+  const { trackCall } = useApiTracker();
 
   const generateNarration = useCallback(async (
     place: Place,
@@ -54,10 +56,18 @@ export function useNarration() {
           question: context.question
         })
       });
+      
+      trackCall('openAI');
 
       if (!response.ok) throw new Error('Narration generation failed');
       
-      const data = await response.json();
+      const resText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(resText);
+      } catch(e) {
+        throw new Error('Invalid JSON from narration endpoint');
+      }
       const text = data.narration;
 
       const newRecord: NarrationRecord = {

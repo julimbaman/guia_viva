@@ -3,10 +3,12 @@ import { useState, useRef, useCallback } from 'react';
 import { db } from '../firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
+import { useApiTracker } from './useApiTracker';
 
 export interface Place {
   id: string;
   displayName: { text: string };
+  formattedAddress?: string;
   types: string[];
   rating: number;
   userRatingCount: number;
@@ -27,6 +29,8 @@ export function usePlaces() {
   const [suggestions, setSuggestions] = useState<Place[]>([]);
   const [zoneName, setZoneName] = useState<string>('Unknown Zone');
   const [isLoading, setIsLoading] = useState(false);
+  const [rawResults, setRawResults] = useState<any>(null);
+  const { trackCall } = useApiTracker();
   
   const placesCache = useRef<Map<string, CacheEntry>>(new Map());
   const lastGeocodeLoc = useRef<{lat: number, lng: number} | null>(null);
@@ -86,12 +90,25 @@ export function usePlaces() {
         body: JSON.stringify({ lat, lng, radius, types, zoneName: currentZone })
       });
       
+      // Track the call since an actual backend hit occurred
+      trackCall('googlePlaces');
+      trackCall('openAI');
+      
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.details || errData.error || 'Failed to fetch places');
+        const text = await response.text().catch(() => '');
+        let errData = {};
+        try { errData = JSON.parse(text); } catch(e) {}
+        throw new Error((errData as any).details || (errData as any).error || 'Failed to fetch places');
       }
       
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+        setRawResults(data); // Capture raw results for debugging
+      } catch(e) {
+        throw new Error('Invalid JSON received');
+      }
       const fetchedPlaces = data.places || [];
       
       // Save to local cache
@@ -132,7 +149,11 @@ export function usePlaces() {
           }, { merge: true });
         } catch (error) {
           console.error("Error saving to Firebase cache", error);
-          handleFirestoreError(error, OperationType.WRITE, `poi_grids/${gridId}`);
+          try {
+            handleFirestoreError(error, OperationType.WRITE, `poi_grids/${gridId}`);
+          } catch (handlerError) {
+            console.error("Swallowed handleFirestoreError exception to return places");
+          }
         }
       }
 
@@ -158,7 +179,14 @@ export function usePlaces() {
     try {
       const response = await fetch(`/api/geocode?lat=${lat}&lng=${lng}`);
       if (!response.ok) throw new Error('Geocoding failed');
-      const data = await response.json();
+      
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch(e) {
+        throw new Error('Invalid JSON');
+      }
       setZoneName(data.zoneName);
       lastGeocodeLoc.current = { lat, lng };
       return data.zoneName;
@@ -168,7 +196,7 @@ export function usePlaces() {
     }
   }, [zoneName]);
 
-  const fetchGoogleSuggestions = useCallback(async (lat: number, lng: number, radius: number) => {
+  const fetchGoogleSuggestions = useCallback(async (lat: number, lng: number, radius: number, types?: string[]) => {
     if (lastSuggestionLoc.current) {
       const dist = Math.sqrt(
         Math.pow(lastSuggestionLoc.current.lat - lat, 2) + 
@@ -181,10 +209,19 @@ export function usePlaces() {
       const response = await fetch('/api/places/suggestions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lat, lng, radius })
+        body: JSON.stringify({ lat, lng, radius, types })
       });
+      trackCall('googlePlaces');
+      
       if (response.ok) {
-        const data = await response.json();
+        const text = await response.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch(e) {
+          console.warn('Invalid JSON from suggestions');
+          return;
+        }
         setSuggestions(data.places || []);
         lastSuggestionLoc.current = { lat, lng };
       } else {
@@ -195,5 +232,34 @@ export function usePlaces() {
     }
   }, []);
 
-  return { places, zoneName, isLoading, fetchNearbyPlaces, reverseGeocode, suggestions, fetchGoogleSuggestions };
+  const searchPlacesText = useCallback(async (query: string, lat?: number, lng?: number) => {
+    try {
+      const response = await fetch('/api/places/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, lat, lng })
+      });
+      trackCall('googlePlaces');
+      
+      if (response.ok) {
+        const text = await response.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch(e) {
+          console.warn('Invalid JSON from search');
+          return [];
+        }
+        return data.places || [];
+      } else {
+        console.warn('Failed to search places text');
+        return [];
+      }
+    } catch (error) {
+      console.error(error);
+      return [];
+    }
+  }, []);
+
+  return { places, zoneName, isLoading, rawResults, fetchNearbyPlaces, reverseGeocode, suggestions, fetchGoogleSuggestions, searchPlacesText };
 }
