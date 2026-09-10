@@ -200,6 +200,14 @@ service cloud.firestore {
       }
     }
 
+    match /admins/{adminId} {
+      // A user may only check their OWN admin status from the client (used to
+      // show/hide the admin panel entry point). Granting/revoking admin is
+      // done out-of-band (Firebase console or Admin SDK) — never from the app.
+      allow read: if isOwner(adminId);
+      allow write: if false;
+    }
+
     match /poi_grids/{gridId} {
       // Anyone authenticated can read and write to the global POI cache
       allow read: if isAuthenticated();

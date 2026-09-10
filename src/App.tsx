@@ -16,9 +16,10 @@ import { auth, db } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { ApiTrackerProvider } from './hooks/useApiTracker';
-import { Loader2, BarChart2 } from 'lucide-react';
+import { Loader2, BarChart2, ShieldCheck } from 'lucide-react';
 import { ApiStatsModal } from './components/screens/ApiStatsModal';
 import { DebugExplorer } from './components/screens/DebugExplorer';
+import { AdminPanel } from './components/screens/AdminPanel';
 
 type AppState = 'waiting' | 'home' | 'countdown' | 'active' | 'tour_planner' | 'tours_list' | 'active_tour';
 
@@ -35,11 +36,13 @@ function AppContent() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [appState, setAppState] = useState<AppState>('waiting');
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const [showConfig, setShowConfig] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [selectedTour, setSelectedTour] = useState<any>(null);
   const { location, error, isWaiting, retry } = useGPS();
   const {
@@ -70,8 +73,18 @@ function AppContent() {
           console.error(e);
           setNeedsOnboarding(true);
         }
+
+        // Admin status is optional and non-critical to the main flow, so a
+        // denied/failed read (e.g. no admins/{uid} doc) just means "not admin".
+        try {
+          const adminDoc = await getDoc(doc(db, 'admins', currentUser.uid));
+          setIsAdmin(adminDoc.exists());
+        } catch (e) {
+          setIsAdmin(false);
+        }
       } else {
         setNeedsOnboarding(false);
+        setIsAdmin(false);
       }
       setAuthLoading(false);
     });
@@ -226,14 +239,24 @@ function AppContent() {
         />
       )}
       {user && (
-        <button 
+        <button
           onClick={() => setShowStats(true)}
           className="fixed top-4 left-4 z-[9900] bg-surface/80 backdrop-blur-md p-2 rounded-full border border-white/10 text-text/80 hover:text-white"
         >
           <BarChart2 className="w-5 h-5" />
         </button>
       )}
+      {isAdmin && (
+        <button
+          onClick={() => setShowAdmin(true)}
+          className="fixed top-4 left-16 z-[9900] bg-surface/80 backdrop-blur-md p-2 rounded-full border border-white/10 text-primary hover:text-white"
+          title="Panel de administración"
+        >
+          <ShieldCheck className="w-5 h-5" />
+        </button>
+      )}
       {showStats && <ApiStatsModal onClose={() => setShowStats(false)} />}
+      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
       <div className="fixed bottom-1 right-2 text-[10px] text-white/30 z-[9999] pointer-events-none font-mono">
         {APP_VERSION}
       </div>

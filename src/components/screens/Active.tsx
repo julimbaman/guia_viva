@@ -365,8 +365,8 @@ export function Active({
       {/* Footer Input */}
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-bg via-bg to-bg z-20 flex flex-col gap-3">
         
-        <button 
-          onClick={() => discoverAndNarrate(true, true)}
+        <button
+          onClick={() => discoverAndNarrate(true, false)}
           disabled={isProcessing || isSpeaking}
           className="w-full bg-primary/20 text-primary hover:bg-primary/30 py-3 rounded-xl flex justify-center items-center gap-2 transition-colors disabled:opacity-50 font-bold shadow-lg border border-primary/30 animate-fade-up"
         >

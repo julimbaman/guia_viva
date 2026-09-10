@@ -50,6 +50,23 @@ The application uses Firebase Firestore. Below is the blueprint of the database 
 - `cacheExpiresAt` (timestamp)
 - `lastRefreshedAt` (timestamp)
 - `refreshPriority` (number)
+- `curatedByAdmin` (boolean, optional) — `true` when this grid was written by the
+  admin panel (`server/routes/admin.ts`) instead of an organic user visit.
+  Curated grids get a much longer `cacheExpiresAt` (180 days) since they're
+  manually vetted rather than opportunistically cached.
+- `curatedLabel` (string, optional) — human label given by the admin (e.g.
+  "Oficina Woobsing"), shown in the admin panel's "sitios ya poblados" list.
+- `curatedBy` (string, optional) — uid of the admin who populated this grid.
+
+#### 1b. `admins` (`/admins/{userId}`)
+**Purpose:** Marks a user as a super admin. Mere existence of the document
+grants access — `Document ID` is the user's `auth.uid`, and its fields are
+informational only (see `isAdmin()` in `firestore.rules`). The client can read
+its OWN doc (to show/hide the admin panel entry point) but can never write to
+this collection — an admin is granted exclusively via
+`npm run grant-admin <uid-or-email>` (Firebase Admin SDK, see `scripts/grant-admin.ts`)
+or manually in the Firebase Console. This keeps privilege escalation
+impossible from the client.
 
 #### 3. `tour_routes` (`/tour_routes/{routeId}`)
 **Purpose:** A curated set of POIs forming a route. Python scripts will frequently populate this collection with pre-made, high-quality tours (e.g., "Historic Downtown Rome").

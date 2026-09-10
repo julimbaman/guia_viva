@@ -10,6 +10,7 @@ import geocodeRouter from './routes/geocode.js';
 import narrateRouter from './routes/narrate.js';
 import directionsRouter from './routes/directions.js';
 import usageRouter from './routes/usage.js';
+import adminRouter from './routes/admin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +39,7 @@ async function startServer() {
   app.use('/api/narrate', narrateRouter);
   app.use('/api/directions', directionsRouter);
   app.use('/api/usage', usageRouter);
+  app.use('/api/admin', adminRouter);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
