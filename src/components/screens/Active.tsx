@@ -23,20 +23,22 @@ interface ActiveProps {
   suggestions: Place[];
   fetchNearbyPlaces: (lat: number, lng: number, radius: number, types?: string[], currentZone?: string, force?: boolean) => Promise<any[]>;
   fetchGoogleSuggestions: (lat: number, lng: number, radius: number, types?: string[]) => Promise<void>;
+  globalBudgetExceeded: boolean;
   onConfigChange: (config: AppConfig) => void;
   onStop: () => void;
   onOpenDebug: () => void;
 }
 
-export function Active({ 
-  location, 
-  zoneName, 
-  config, 
-  places, 
-  suggestions, 
-  fetchNearbyPlaces, 
-  fetchGoogleSuggestions, 
-  onConfigChange, 
+export function Active({
+  location,
+  zoneName,
+  config,
+  places,
+  suggestions,
+  fetchNearbyPlaces,
+  fetchGoogleSuggestions,
+  globalBudgetExceeded,
+  onConfigChange,
   onStop,
   onOpenDebug
 }: ActiveProps) {
@@ -291,6 +293,11 @@ export function Active({
       {dailyLimitWarning && (
         <div className="absolute top-36 left-1/2 -translate-x-1/2 bg-red-500/90 text-white px-4 py-3 rounded-xl text-center text-sm font-medium z-50 animate-fade-in shadow-lg w-10/12">
           Has alcanzado el límite diario (100 consultas max). Continúa explorando gratis desde caché o vuelve mañana.
+        </div>
+      )}
+      {globalBudgetExceeded && (
+        <div className="absolute top-36 left-1/2 -translate-x-1/2 bg-red-500/90 text-white px-4 py-3 rounded-xl text-center text-sm font-medium z-50 animate-fade-in shadow-lg w-10/12">
+          Se alcanzó el presupuesto diario de la app para Google Places/OpenAI. Sigue explorando desde caché; vuelve mañana para nuevas zonas.
         </div>
       )}
 

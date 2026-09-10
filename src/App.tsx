@@ -42,16 +42,17 @@ function AppContent() {
   const [showDebug, setShowDebug] = useState(false);
   const [selectedTour, setSelectedTour] = useState<any>(null);
   const { location, error, isWaiting, retry } = useGPS();
-  const { 
-    places, 
-    suggestions, 
-    zoneName, 
+  const {
+    places,
+    suggestions,
+    zoneName,
     isLoading: isPlacesLoading,
     rawResults,
-    fetchNearbyPlaces, 
-    reverseGeocode, 
+    fetchNearbyPlaces,
+    reverseGeocode,
     fetchGoogleSuggestions,
-    searchPlacesText
+    searchPlacesText,
+    globalBudgetExceeded
   } = usePlaces();
 
   useEffect(() => {
@@ -146,8 +147,9 @@ function AppContent() {
             suggestions={suggestions}
             fetchNearbyPlaces={fetchNearbyPlaces}
             fetchGoogleSuggestions={fetchGoogleSuggestions}
-            onConfigChange={setConfig} 
-            onStop={() => setAppState('home')} 
+            globalBudgetExceeded={globalBudgetExceeded}
+            onConfigChange={setConfig}
+            onStop={() => setAppState('home')}
             onOpenDebug={() => setShowDebug(true)}
           />
         );

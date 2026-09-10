@@ -1,16 +1,32 @@
-import React from 'react';
-import { X, Network, Cpu, Database } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, Network, Cpu, Database, DollarSign } from 'lucide-react';
 import { useApiTracker } from '../../hooks/useApiTracker';
 
 interface ApiStatsModalProps {
   onClose: () => void;
 }
 
+interface GlobalUsage {
+  today: { googlePlacesCalls: number; openAICalls: number; estimatedCostUSD: number };
+  dailyBudgetUSD: number;
+  remainingUSD: number;
+  budgetExceeded: boolean;
+}
+
 export function ApiStatsModal({ onClose }: ApiStatsModalProps) {
   const { dailyUsage } = useApiTracker();
+  const [globalUsage, setGlobalUsage] = useState<GlobalUsage | null>(null);
+
+  useEffect(() => {
+    fetch('/api/usage')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => data && setGlobalUsage(data))
+      .catch(() => {}); // Stats are informational only; a failed fetch shouldn't disrupt the modal.
+  }, []);
 
   const total = dailyUsage.googlePlaces + dailyUsage.openAI;
   const percentage = Math.min((total / dailyUsage.totalLimit) * 100, 100);
+  const globalPercentage = globalUsage ? Math.min((globalUsage.today.estimatedCostUSD / globalUsage.dailyBudgetUSD) * 100, 100) : 0;
 
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -67,7 +83,40 @@ export function ApiStatsModal({ onClose }: ApiStatsModalProps) {
               <div className="font-bold font-mono">{dailyUsage.openAI}</div>
             </div>
           </div>
-          
+
+          {globalUsage && (
+            <div className="space-y-3 pt-4 border-t border-white/10">
+              <h3 className="text-xs font-bold text-text/50 uppercase tracking-wider mb-2">Presupuesto Global de la App (hoy)</h3>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-white/5">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                    <DollarSign size={16} />
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm">Gasto estimado</div>
+                    <div className="text-[10px] text-text/50">
+                      {globalUsage.today.googlePlacesCalls} Places · {globalUsage.today.openAICalls} OpenAI
+                    </div>
+                  </div>
+                </div>
+                <div className="font-bold font-mono">
+                  ${globalUsage.today.estimatedCostUSD.toFixed(2)} / ${globalUsage.dailyBudgetUSD.toFixed(2)}
+                </div>
+              </div>
+              <div className="w-full h-3 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ${globalPercentage > 90 ? 'bg-danger' : globalPercentage > 70 ? 'bg-amber-500' : 'bg-primary'}`}
+                  style={{ width: `${globalPercentage}%` }}
+                ></div>
+              </div>
+              {globalUsage.budgetExceeded && (
+                <p className="text-center text-[10px] text-danger font-medium">
+                  Presupuesto diario agotado: el backend ya no llama a Places/OpenAI hasta mañana.
+                </p>
+              )}
+            </div>
+          )}
+
           <p className="text-center text-[10px] text-text/40 leading-relaxed mt-4">
              En la versión gratuita tienes un límite de 100 consultas al día para asegurar el servicio para todos. Además, puedes hacer máximo 10 consultas por minuto.
           </p>

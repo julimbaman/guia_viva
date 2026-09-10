@@ -1,14 +1,22 @@
 import { Router } from 'express';
 import OpenAI from 'openai';
+import { isBudgetExceeded, recordGooglePlacesCall, recordOpenAICall, DAILY_BUDGET_USD } from '../costGuard.js';
 
 const router = Router();
 
 router.post('/nearby', async (req, res) => {
   try {
     const { lat, lng, radius, types, zoneName } = req.body;
-    
+
     if (!lat || !lng) {
       return res.status(400).json({ error: 'Missing lat or lng' });
+    }
+
+    // Root-level cost brake: refuse to call Google/OpenAI at all once today's
+    // estimated spend hits the configured ceiling. Callers should already be
+    // hitting Firestore cache first, but this is the backstop if they don't.
+    if (isBudgetExceeded()) {
+      return res.status(429).json({ error: 'Daily API budget exceeded', budgetExceeded: true, limitUSD: DAILY_BUDGET_USD });
     }
 
     const googleApiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -77,6 +85,8 @@ router.post('/nearby', async (req, res) => {
       });
     }
 
+    recordGooglePlacesCall();
+
     const googleData = await googleRes.json();
     let places = googleData.places || [];
 
@@ -87,8 +97,9 @@ router.post('/nearby', async (req, res) => {
     // 2. Generate narrations for the top 5 places using OpenAI
     const topPlaces = places.slice(0, 5);
     const openaiApiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY;
-    
-    if (openaiApiKey) {
+
+    // Re-check the budget: the Places call above may have just pushed us over it.
+    if (openaiApiKey && !isBudgetExceeded()) {
       try {
         const openai = new OpenAI({
           apiKey: openaiApiKey,
@@ -121,6 +132,8 @@ Return ONLY a valid JSON object where keys are the place IDs and values are the 
           temperature: 0.7
         });
 
+        recordOpenAICall(completion.usage);
+
         let content = completion.choices[0]?.message?.content?.trim() || '{}';
         const match = content.match(/\{[\s\S]*\}/);
         if (match) content = match[0];
@@ -150,6 +163,10 @@ router.post('/search', async (req, res) => {
   try {
     const { query, lat, lng } = req.body;
     if (!query) return res.status(400).json({ error: 'Missing query' });
+
+    if (isBudgetExceeded()) {
+      return res.status(429).json({ error: 'Daily API budget exceeded', budgetExceeded: true, limitUSD: DAILY_BUDGET_USD, places: [] });
+    }
 
     const apiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
@@ -188,6 +205,8 @@ router.post('/search', async (req, res) => {
       return res.status(500).json({ error: 'Failed to search places' });
     }
 
+    recordGooglePlacesCall();
+
     const data = await response.json();
     res.json(data || { places: [] });
   } catch (error) {
@@ -200,6 +219,10 @@ router.post('/suggestions', async (req, res) => {
   try {
     const { lat, lng, radius, types } = req.body;
     if (!lat || !lng) return res.status(400).json({ error: 'Missing lat or lng' });
+
+    if (isBudgetExceeded()) {
+      return res.status(429).json({ error: 'Daily API budget exceeded', budgetExceeded: true, limitUSD: DAILY_BUDGET_USD, places: [] });
+    }
 
     const apiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
@@ -262,6 +285,8 @@ router.post('/suggestions', async (req, res) => {
       return res.json({ places: [] });
     }
 
+    recordGooglePlacesCall();
+
     const data = await response.json();
     res.json(data || { places: [] });
   } catch (error) {
@@ -275,6 +300,12 @@ router.get('/photo', async (req, res) => {
     const { name } = req.query;
     if (!name) return res.status(400).send('Missing photo name');
 
+    // Photo requests are billed too and a list view can trigger dozens at once,
+    // so they count against the same daily budget.
+    if (isBudgetExceeded()) {
+      return res.status(429).send('Daily API budget exceeded');
+    }
+
     const apiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
     if (!apiKey) return res.status(500).send('Missing API Key');
 
@@ -282,6 +313,8 @@ router.get('/photo', async (req, res) => {
     
     const response = await fetch(url);
     if (!response.ok) throw new Error('Failed to fetch photo from Google');
+
+    recordGooglePlacesCall();
 
     const contentType = response.headers.get('content-type');
     if (contentType) res.setHeader('Content-Type', contentType);

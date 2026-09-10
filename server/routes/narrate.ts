@@ -1,10 +1,15 @@
 import { Router } from 'express';
 import OpenAI from 'openai';
+import { isBudgetExceeded, recordOpenAICall, DAILY_BUDGET_USD } from '../costGuard.js';
 
 const router = Router();
 
 router.post('/', async (req, res) => {
   try {
+    if (isBudgetExceeded()) {
+      return res.status(429).json({ error: 'Daily API budget exceeded', budgetExceeded: true, limitUSD: DAILY_BUDGET_USD });
+    }
+
     const {
       transport_mode,
       speed,
@@ -80,6 +85,8 @@ Respond with ONLY the narration text. No quotes, no markdown, no formatting.`;
       messages: messages,
       temperature: 0.7,
     });
+
+    recordOpenAICall(completion.usage);
 
     const narration = completion.choices[0]?.message?.content?.trim() || '';
 

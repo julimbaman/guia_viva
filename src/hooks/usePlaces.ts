@@ -30,6 +30,9 @@ export function usePlaces() {
   const [zoneName, setZoneName] = useState<string>('Unknown Zone');
   const [isLoading, setIsLoading] = useState(false);
   const [rawResults, setRawResults] = useState<any>(null);
+  // Set when the backend's global daily cost guard (server/costGuard.ts) refuses
+  // a call because today's estimated Google/OpenAI spend hit the ceiling.
+  const [globalBudgetExceeded, setGlobalBudgetExceeded] = useState(false);
   const { trackCall } = useApiTracker();
   
   const placesCache = useRef<Map<string, CacheEntry>>(new Map());
@@ -98,18 +101,23 @@ export function usePlaces() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lat, lng, radius, types, zoneName: currentZone })
       });
-      
-      // Track the call since an actual backend hit occurred
-      trackCall('googlePlaces');
-      trackCall('openAI');
-      
+
       if (!response.ok) {
         const text = await response.text().catch(() => '');
-        let errData = {};
+        let errData: any = {};
         try { errData = JSON.parse(text); } catch(e) {}
-        throw new Error((errData as any).details || (errData as any).error || 'Failed to fetch places');
+        if (errData.budgetExceeded) {
+          setGlobalBudgetExceeded(true);
+          return [];
+        }
+        throw new Error(errData.details || errData.error || 'Failed to fetch places');
       }
-      
+
+      // Only track usage once we know the backend actually made the paid calls.
+      setGlobalBudgetExceeded(false);
+      trackCall('googlePlaces');
+      trackCall('openAI');
+
       const text = await response.text();
       let data;
       try {
@@ -230,9 +238,11 @@ export function usePlaces() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lat, lng, radius, types })
       });
-      trackCall('googlePlaces');
 
       if (response.ok) {
+        setGlobalBudgetExceeded(false);
+        trackCall('googlePlaces');
+
         const text = await response.text();
         let data;
         try {
@@ -244,6 +254,10 @@ export function usePlaces() {
         setSuggestions(data.places || []);
         lastSuggestionLoc.current = { lat, lng };
       } else {
+        const text = await response.text().catch(() => '');
+        let errData: any = {};
+        try { errData = JSON.parse(text); } catch(e) {}
+        if (errData.budgetExceeded) setGlobalBudgetExceeded(true);
         console.warn('Failed to fetch suggestions from server');
       }
     } catch (error) {
@@ -280,5 +294,5 @@ export function usePlaces() {
     }
   }, []);
 
-  return { places, zoneName, isLoading, rawResults, fetchNearbyPlaces, reverseGeocode, suggestions, fetchGoogleSuggestions, searchPlacesText };
+  return { places, zoneName, isLoading, rawResults, fetchNearbyPlaces, reverseGeocode, suggestions, fetchGoogleSuggestions, searchPlacesText, globalBudgetExceeded };
 }
