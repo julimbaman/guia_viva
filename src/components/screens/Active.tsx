@@ -205,23 +205,32 @@ export function Active({
     }
   };
 
-  // Main loop for discovering and narrating
+  // Main loop for discovering and narrating.
+  // GPS emits updates far more often than every 5s, so the interval below is set up ONCE per
+  // mount and always calls through tickRef (refreshed every render) to read the latest
+  // location/config. Previously this effect depended on location.lat/lng directly, which
+  // meant every GPS tick tore down and recreated the interval before it could ever fire —
+  // effectively stalling the discovery loop instead of running it every 5s as intended.
+  const tickRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    tickRef.current = () => {
+      fetchGoogleSuggestions(location.lat, location.lng, getSearchRadius(mode), config.interests.length > 0 ? config.interests : undefined);
+      discoverAndNarrate(false, false);
+    };
+  });
+
   const hasInitialDiscovery = useRef(false);
   useEffect(() => {
-    // Fetch suggestions from Google Places API
-    fetchGoogleSuggestions(location.lat, location.lng, getSearchRadius(mode), config.interests.length > 0 ? config.interests : undefined);
-
     if (!hasInitialDiscovery.current) {
       hasInitialDiscovery.current = true;
+      fetchGoogleSuggestions(location.lat, location.lng, getSearchRadius(mode), config.interests.length > 0 ? config.interests : undefined);
       discoverAndNarrate(true, false); // Ignore timer for first run, but use cache
     }
 
-    const timerId = setInterval(() => {
-      discoverAndNarrate(false, false);
-    }, 5000); // Check every 5s
-    
+    const timerId = setInterval(() => tickRef.current(), 5000); // Check every 5s, reliably
     return () => clearInterval(timerId);
-  }, [location.lat, location.lng, mode, config.interests, config.narrationInterval, config.routeLookahead, fetchNearbyPlaces, fetchGoogleSuggestions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Check if arrived at destination
   useEffect(() => {

@@ -36,54 +36,63 @@ export function usePlaces() {
   const lastGeocodeLoc = useRef<{lat: number, lng: number} | null>(null);
   const lastSuggestionLoc = useRef<{lat: number, lng: number} | null>(null);
 
-  const fetchNearbyPlaces = useCallback(async (lat: number, lng: number, radius: number, types?: string[], currentZone?: string, force: boolean = false) => {
-    // Generate transport mode derived from radius (rough approx)
+  // Shared grid-key logic: same location + radius always resolves to the same cache entry,
+  // so places fetched via /nearby and suggestions fetched via /suggestions can reuse each other's cache.
+  const getGridId = (lat: number, lng: number, radius: number) => {
     const mode = radius > 1000 ? 'vehicle' : 'walking';
-    // Grid ID based on approx 1.1km grid (2 decimal places) and transport mode
     const gridId = `${lat.toFixed(2)}_${lng.toFixed(2)}_${mode}`;
-    const cacheKey = `${gridId}_${radius}`;
+    return { gridId, cacheKey: `${gridId}_${radius}`, mode };
+  };
+
+  // Checks local memory cache, then Firebase, for previously-fetched places at this grid location.
+  // Returns null on a miss so callers know they must hit the live API.
+  const getCachedPlaces = useCallback(async (gridId: string, cacheKey: string): Promise<Place[] | null> => {
     const now = Date.now();
-    
-    // 1. Check local memory cache first
+
     const localCached = placesCache.current.get(cacheKey);
-    if (!force && localCached && (now - localCached.timestamp < 300000)) {
-      setPlaces(localCached.data);
+    if (localCached && (now - localCached.timestamp < 300000)) {
       return localCached.data;
     }
 
+    const gridDocRef = doc(db, 'poi_grids', gridId);
+    try {
+      const gridDoc = await getDoc(gridDocRef);
+      if (gridDoc.exists()) {
+        const data = gridDoc.data();
+        const expiresAt = data.cacheExpiresAt?.toMillis() || (data.updatedAt?.toMillis() || 0) + (7 * 24 * 60 * 60 * 1000);
+
+        if (now < expiresAt) {
+          const fetchedPlaces = typeof data.places === 'string' ? JSON.parse(data.places) : data.places;
+          if (fetchedPlaces && Array.isArray(fetchedPlaces) && fetchedPlaces.length > 0) {
+            placesCache.current.set(cacheKey, { timestamp: now, data: fetchedPlaces });
+            return fetchedPlaces;
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error reading from Firebase cache", error);
+      // We don't throw handleFirestoreError here because we want to fallback to the live API if read fails
+    }
+    return null;
+  }, []);
+
+  const fetchNearbyPlaces = useCallback(async (lat: number, lng: number, radius: number, types?: string[], currentZone?: string, force: boolean = false) => {
+    const { gridId, cacheKey, mode } = getGridId(lat, lng, radius);
+    const now = Date.now();
+
     setIsLoading(true);
     try {
-      // 2. Check Firebase global cache
+      // 1. Check local memory cache, then Firebase global cache before ever touching Google/OpenAI
       if (!force) {
-        const gridDocRef = doc(db, 'poi_grids', gridId);
-        try {
-          const gridDoc = await getDoc(gridDocRef);
-          
-          if (gridDoc.exists()) {
-            const data = gridDoc.data();
-            
-            // Task 3: Use cacheExpiresAt to determine TTL
-            const expiresAt = data.cacheExpiresAt?.toMillis() || (data.updatedAt?.toMillis() || 0) + (7 * 24 * 60 * 60 * 1000);
-            
-            if (now < expiresAt) {
-              // Now data.places is directly an array of objects
-              const fetchedPlaces = typeof data.places === 'string' ? JSON.parse(data.places) : data.places;
-              
-              if (fetchedPlaces && Array.isArray(fetchedPlaces) && fetchedPlaces.length > 0) {
-                placesCache.current.set(cacheKey, { timestamp: now, data: fetchedPlaces });
-                setPlaces(fetchedPlaces);
-                setIsLoading(false);
-                return fetchedPlaces;
-              }
-            }
-          }
-        } catch (error) {
-          console.error("Error reading from Firebase cache", error);
-          // We don't throw handleFirestoreError here because we want to fallback to OpenAI if read fails
+        const cached = await getCachedPlaces(gridId, cacheKey);
+        if (cached) {
+          setPlaces(cached);
+          setIsLoading(false);
+          return cached;
         }
       }
 
-      // 3. Fallback to OpenAI API (now Google + OpenAI)
+      // 2. Fallback to OpenAI API (now Google + OpenAI)
       const response = await fetch('/api/places/nearby', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -164,7 +173,7 @@ export function usePlaces() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [getCachedPlaces]);
 
   const reverseGeocode = useCallback(async (lat: number, lng: number) => {
     // Only geocode if moved significantly (>50m), unless we currently have an Unknown Zone
@@ -199,10 +208,20 @@ export function usePlaces() {
   const fetchGoogleSuggestions = useCallback(async (lat: number, lng: number, radius: number, types?: string[]) => {
     if (lastSuggestionLoc.current) {
       const dist = Math.sqrt(
-        Math.pow(lastSuggestionLoc.current.lat - lat, 2) + 
+        Math.pow(lastSuggestionLoc.current.lat - lat, 2) +
         Math.pow(lastSuggestionLoc.current.lng - lng, 2)
       ) * 111320;
       if (dist < 50) return; // Don't fetch if moved less than 50m
+    }
+
+    // Suggestions are just a subset of the same nearby-places grid, so check the
+    // shared memory/Firebase cache first instead of always hitting Google live.
+    const { gridId, cacheKey } = getGridId(lat, lng, radius);
+    const cached = await getCachedPlaces(gridId, cacheKey);
+    if (cached) {
+      setSuggestions(cached.slice(0, 5));
+      lastSuggestionLoc.current = { lat, lng };
+      return;
     }
 
     try {
@@ -212,7 +231,7 @@ export function usePlaces() {
         body: JSON.stringify({ lat, lng, radius, types })
       });
       trackCall('googlePlaces');
-      
+
       if (response.ok) {
         const text = await response.text();
         let data;
@@ -230,7 +249,7 @@ export function usePlaces() {
     } catch (error) {
       console.error(error);
     }
-  }, []);
+  }, [getCachedPlaces]);
 
   const searchPlacesText = useCallback(async (query: string, lat?: number, lng?: number) => {
     try {
