@@ -7,6 +7,7 @@
 // Usage:
 //   FIREBASE_SERVICE_ACCOUNT_JSON='<service-account-json>' npx tsx scripts/grant-admin.ts someone@example.com
 //   npx tsx scripts/grant-admin.ts <uid>              # if already authenticated via Application Default Credentials
+import 'dotenv/config';
 import { adminAuth, adminDb } from '../server/firebaseAdmin.js';
 
 async function main() {
