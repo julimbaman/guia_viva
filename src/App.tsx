@@ -15,6 +15,7 @@ import { ActiveTour } from './components/screens/ActiveTour';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { checkAdminStatus } from './hooks/useAdminStatus';
 import { ApiTrackerProvider } from './hooks/useApiTracker';
 import { Loader2, BarChart2, ShieldCheck } from 'lucide-react';
 import { ApiStatsModal } from './components/screens/ApiStatsModal';
@@ -75,13 +76,8 @@ function AppContent() {
         }
 
         // Admin status is optional and non-critical to the main flow, so a
-        // denied/failed read (e.g. no admins/{uid} doc) just means "not admin".
-        try {
-          const adminDoc = await getDoc(doc(db, 'admins', currentUser.uid));
-          setIsAdmin(adminDoc.exists());
-        } catch (e) {
-          setIsAdmin(false);
-        }
+        // denied/failed check just means "not admin" rather than blocking login.
+        setIsAdmin(await checkAdminStatus(currentUser));
       } else {
         setNeedsOnboarding(false);
         setIsAdmin(false);
@@ -102,6 +98,24 @@ function AppContent() {
       reverseGeocode(location.lat, location.lng);
     }
   }, [location, reverseGeocode]);
+
+  // Gives the admin panel a real, bookmarkable URL (/admin) even though the
+  // rest of the app is a single in-memory state machine with no router.
+  useEffect(() => {
+    if (!authLoading && isAdmin && window.location.pathname === '/admin') {
+      setShowAdmin(true);
+    }
+  }, [authLoading, isAdmin]);
+
+  const openAdmin = () => {
+    window.history.pushState(null, '', '/admin');
+    setShowAdmin(true);
+  };
+
+  const closeAdmin = () => {
+    window.history.pushState(null, '', '/');
+    setShowAdmin(false);
+  };
 
   const renderScreen = () => {
     if (authLoading) {
@@ -248,7 +262,7 @@ function AppContent() {
       )}
       {isAdmin && (
         <button
-          onClick={() => setShowAdmin(true)}
+          onClick={openAdmin}
           className="fixed top-4 left-16 z-[9900] bg-surface/80 backdrop-blur-md p-2 rounded-full border border-white/10 text-primary hover:text-white"
           title="Panel de administración"
         >
@@ -256,7 +270,7 @@ function AppContent() {
         </button>
       )}
       {showStats && <ApiStatsModal onClose={() => setShowStats(false)} />}
-      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
+      {showAdmin && <AdminPanel onClose={closeAdmin} />}
       <div className="fixed bottom-1 right-2 text-[10px] text-white/30 z-[9999] pointer-events-none font-mono">
         {APP_VERSION}
       </div>

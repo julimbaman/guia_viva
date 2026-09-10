@@ -61,12 +61,26 @@ The application uses Firebase Firestore. Below is the blueprint of the database 
 #### 1b. `admins` (`/admins/{userId}`)
 **Purpose:** Marks a user as a super admin. Mere existence of the document
 grants access — `Document ID` is the user's `auth.uid`, and its fields are
-informational only (see `isAdmin()` in `firestore.rules`). The client can read
-its OWN doc (to show/hide the admin panel entry point) but can never write to
-this collection — an admin is granted exclusively via
-`npm run grant-admin <uid-or-email>` (Firebase Admin SDK, see `scripts/grant-admin.ts`)
-or manually in the Firebase Console. This keeps privilege escalation
-impossible from the client.
+informational only (see `isAdmin()` in `firestore.rules`). No client can ever
+write to this collection directly (`firestore.rules` denies it outright); the
+frontend instead asks the backend (`GET /api/admin/status`, see
+`server/adminAuth.ts`) whether the signed-in user is an admin. That endpoint
+is also the ONLY way a doc gets created here without a human doing it by hand:
+the account matching `SUPER_ADMIN_EMAIL` (env var, defaults to
+`julio.camacho@woobsing.com`) is auto-granted admin the very first time they
+check — no manual Firestore step. Everyone else must be granted explicitly via
+`npm run grant-admin <uid-or-email>` (Firebase Admin SDK, see
+`scripts/grant-admin.ts`) or manually in the Firebase Console. This keeps
+privilege escalation impossible from the client while still letting the
+product owner start using the admin panel with zero setup.
+
+The admin panel itself lives at the `/admin` path of the deployed app (same
+origin, no separate host) — see the `ShieldCheck` button in `src/App.tsx`
+and `src/components/screens/AdminPanel.tsx`. It has three tabs: **Resumen**
+(today's estimated Google Places/OpenAI spend + daily budget + history),
+**Sitios** (search-and-populate a site by address, plus a list of
+admin-curated grids), and **Usuarios** (total registered users + the most
+recently registered ones).
 
 #### 3. `tour_routes` (`/tour_routes/{routeId}`)
 **Purpose:** A curated set of POIs forming a route. Python scripts will frequently populate this collection with pre-made, high-quality tours (e.g., "Historic Downtown Rome").

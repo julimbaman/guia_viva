@@ -5,12 +5,25 @@
 // gated by requireAdmin (see server/adminAuth.ts).
 import { Router } from 'express';
 import { FieldValue } from 'firebase-admin/firestore';
-import { requireAdmin, type AdminRequest } from '../adminAuth.js';
+import { requireAdmin, checkAdminStatus, type AdminRequest } from '../adminAuth.js';
 import { adminDb } from '../firebaseAdmin.js';
 import { isBudgetExceeded } from '../costGuard.js';
 import { searchNearbyPlaces, generateNarrationsForPlaces, sanitizePlacesForStorage } from '../placesService.js';
 
 const router = Router();
+
+// Not gated by requireAdmin: this is how the frontend discovers whether the
+// signed-in user is an admin at all (and how the designated super admin gets
+// their admins/{uid} doc created the very first time, with no manual step).
+router.get('/status', async (req, res) => {
+  try {
+    const { isAdmin } = await checkAdminStatus(req);
+    res.json({ isAdmin });
+  } catch (error) {
+    res.status(401).json({ isAdmin: false, error: 'Invalid or expired token' });
+  }
+});
+
 router.use(requireAdmin);
 
 // Broader than the runtime interest defaults (History/Culture/...) since this
@@ -139,6 +152,32 @@ router.get('/sites', async (_req, res) => {
     res.json({ sites });
   } catch (error: any) {
     console.error('Admin list sites error:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+router.get('/users', async (_req, res) => {
+  try {
+    const usersRef = adminDb.collection('users');
+    const [countSnap, recentSnap] = await Promise.all([
+      usersRef.count().get(),
+      usersRef.orderBy('createdAt', 'desc').limit(25).get()
+    ]);
+
+    const recentUsers = recentSnap.docs.map(doc => {
+      const data = doc.data();
+      return {
+        uid: doc.id,
+        email: data.email || null,
+        displayName: data.displayName || null,
+        onboardingComplete: !!data.onboardingComplete,
+        createdAt: data.createdAt?.toDate?.() ?? null
+      };
+    });
+
+    res.json({ totalUsers: countSnap.data().count, recentUsers });
+  } catch (error: any) {
+    console.error('Admin list users error:', error);
     res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
