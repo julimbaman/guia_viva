@@ -10,10 +10,18 @@ export async function checkAdminStatus(user: User): Promise<boolean> {
     const res = await fetch('/api/admin/status', {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) return false;
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      // Not admin is a normal, silent outcome for most users — but a real
+      // backend failure (e.g. Firebase Admin credentials missing in this
+      // environment) should be visible in the console instead of just
+      // quietly showing "not admin" with no way to tell the two apart.
+      console.warn('Admin status check failed:', data.details || data.error || res.status);
+      return false;
+    }
     return !!data.isAdmin;
   } catch (e) {
+    console.warn('Admin status check error:', e);
     return false;
   }
 }
