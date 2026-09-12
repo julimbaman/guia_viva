@@ -3,6 +3,7 @@ import { LocationData } from '../../hooks/useGPS';
 import { AppConfig } from '../ConfigPanel';
 import { signInWithGoogle } from '../../firebase';
 import { useHistory } from '../../hooks/useHistory';
+import { formatBuildLabel } from '../../buildInfo';
 
 interface HomeProps {
   location: LocationData;
@@ -30,7 +31,8 @@ export function Home({ location, zoneName, config, onConfigChange, onStart, onTo
     <div className="min-h-screen flex flex-col p-6 max-w-md mx-auto relative">
       <div className="flex-1 flex flex-col items-center justify-center text-center">
         <h1 className="text-5xl font-bold mb-2 tracking-tight">Guía Viva</h1>
-        <p className="text-text/60 mb-12">Your intelligent real-time tour guide</p>
+        <p className="text-text/60 mb-2">Your intelligent real-time tour guide</p>
+        <p className="text-text/30 text-[11px] font-mono mb-10">build {formatBuildLabel()}</p>
 
         <div className="bg-surface/50 border border-white/10 rounded-3xl p-6 w-full mb-8">
           <div className="flex items-center justify-center gap-2 mb-4">

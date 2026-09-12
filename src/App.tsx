@@ -21,6 +21,7 @@ import { Loader2, BarChart2, ShieldCheck } from 'lucide-react';
 import { ApiStatsModal } from './components/screens/ApiStatsModal';
 import { DebugExplorer } from './components/screens/DebugExplorer';
 import { AdminPanel } from './components/screens/AdminPanel';
+import { formatBuildLabel } from './buildInfo';
 
 type AppState = 'waiting' | 'home' | 'countdown' | 'active' | 'tour_planner' | 'tours_list' | 'active_tour';
 
@@ -30,8 +31,6 @@ const DEFAULT_CONFIG: AppConfig = {
   narrationInterval: 30,
   routeLookahead: 30,
 };
-
-const APP_VERSION = "v1.1.0";
 
 function AppContent() {
   const [user, setUser] = useState<User | null>(null);
@@ -271,8 +270,11 @@ function AppContent() {
       )}
       {showStats && <ApiStatsModal onClose={() => setShowStats(false)} />}
       {showAdmin && <AdminPanel onClose={closeAdmin} />}
-      <div className="fixed bottom-1 right-2 text-[10px] text-white/30 z-[9999] pointer-events-none font-mono">
-        {APP_VERSION}
+      <div
+        className="fixed bottom-1 right-2 text-[10px] text-white/50 z-[9999] pointer-events-none font-mono bg-black/40 px-1.5 py-0.5 rounded"
+        title="Commit · fecha de build — úsalo para confirmar qué versión del código está corriendo"
+      >
+        {formatBuildLabel()}
       </div>
     </>
   );
