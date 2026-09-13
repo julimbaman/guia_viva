@@ -19,8 +19,14 @@ router.get('/status', async (req, res) => {
   try {
     const { isAdmin } = await checkAdminStatus(req);
     res.json({ isAdmin });
-  } catch (error) {
-    res.status(401).json({ isAdmin: false, error: 'Invalid or expired token' });
+  } catch (error: any) {
+    // `details` is intentionally included here (unlike requireAdmin's stricter
+    // 401s): this is the one endpoint the frontend calls just to find out
+    // whether the whole admin subsystem is even working, so the real reason
+    // (e.g. Firebase Admin credentials missing in this environment) needs to
+    // be visible in the browser's Network tab without server log access.
+    console.error('Admin status check error:', error);
+    res.status(401).json({ isAdmin: false, error: 'Invalid or expired token', details: error?.message });
   }
 });
 

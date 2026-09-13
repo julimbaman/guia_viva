@@ -36,7 +36,7 @@ export function usePlaces() {
   const { trackCall } = useApiTracker();
   
   const placesCache = useRef<Map<string, CacheEntry>>(new Map());
-  const lastGeocodeLoc = useRef<{lat: number, lng: number} | null>(null);
+  const lastGeocodeLoc = useRef<{lat: number, lng: number, timestamp: number} | null>(null);
   const lastSuggestionLoc = useRef<{lat: number, lng: number} | null>(null);
 
   // Shared grid-key logic: same location + radius always resolves to the same cache entry,
@@ -184,31 +184,35 @@ export function usePlaces() {
   }, [getCachedPlaces]);
 
   const reverseGeocode = useCallback(async (lat: number, lng: number) => {
-    // Only geocode if moved significantly (>50m), unless we currently have an Unknown Zone
-    if (lastGeocodeLoc.current && zoneName !== 'Unknown Zone') {
-      const dist = Math.sqrt(
-        Math.pow(lastGeocodeLoc.current.lat - lat, 2) + 
-        Math.pow(lastGeocodeLoc.current.lng - lng, 2)
-      ) * 111320; // approx meters
-      if (dist < 50) return zoneName;
+    const now = Date.now();
+
+    // Throttle by distance AND time since the last ATTEMPT — not just the last
+    // success. The previous version only tracked lastGeocodeLoc on success, so
+    // a persistently failing call (bad key, quota, etc.) never got recorded,
+    // zoneName never left 'Unknown Zone', and the "already resolved" bypass
+    // condition (zoneName !== 'Unknown Zone') never engaged — meaning it
+    // retried on every single GPS tick forever. Recording every attempt here,
+    // success or failure, caps retries to once per 30s regardless.
+    if (lastGeocodeLoc.current) {
+      const { lat: prevLat, lng: prevLng, timestamp } = lastGeocodeLoc.current;
+      const dist = Math.sqrt(Math.pow(prevLat - lat, 2) + Math.pow(prevLng - lng, 2)) * 111320;
+      if (dist < 50 && (now - timestamp) < 30000) return zoneName;
     }
+    lastGeocodeLoc.current = { lat, lng, timestamp: now };
 
     try {
       const response = await fetch(`/api/geocode?lat=${lat}&lng=${lng}`);
-      if (!response.ok) throw new Error('Geocoding failed');
-      
       const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch(e) {
-        throw new Error('Invalid JSON');
+      let data: any = {};
+      try { data = JSON.parse(text); } catch(e) { /* fall through with empty data */ }
+
+      if (!response.ok) {
+        throw new Error(data.error || data.status || 'Geocoding failed');
       }
       setZoneName(data.zoneName);
-      lastGeocodeLoc.current = { lat, lng };
       return data.zoneName;
     } catch (error) {
-      console.error(error);
+      console.error('Geocoding error:', error);
       return zoneName;
     }
   }, [zoneName]);
