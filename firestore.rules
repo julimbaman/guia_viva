@@ -1,0 +1,288 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (matches auth.uid)
+    // Fields:
+    //   - displayName: string (required, max 100)
+    //   - email: string (required, valid email)
+    //   - interests: list (optional, max 20 items, strings max 50 chars)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // Subcollection: visits
+    // Document ID: auto-generated or placeId
+    // Fields:
+    //   - poiName: string (required, max 200)
+    //   - placeId: string (required, max 200)
+    //   - lat: number (required)
+    //   - lng: number (required)
+    //   - narration: string (optional, max 2000)
+    //   - timestamp: timestamp (required, immutable)
+    //
+    // Subcollection: routes
+    // Document ID: auto-generated
+    // Fields:
+    //   - startedAt: timestamp (required, immutable)
+    //   - endedAt: timestamp (optional)
+    //   - points: string (required, JSON stringified array, max 100000 chars)
+    //
+    // Subcollection: favorites
+    // Document ID: placeId
+    // Fields:
+    //   - poiName: string (required, max 200)
+    //   - lat: number (required)
+    //   - lng: number (required)
+    //   - savedAt: timestamp (required, immutable)
+    //
+    // Collection: poi_grids
+    // Document ID: gridId (e.g., "4.65_-74.10")
+    // Fields:
+    //   - gridId: string (required, max 50)
+    //   - places: string (required, JSON stringified array, max 1000000 chars)
+    //   - updatedAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidString(field, minLen, maxLen) {
+      return field is string && field.size() >= minLen && field.size() <= maxLen;
+    }
+
+    function isImmutable(field) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([field]);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUserProfile(data) {
+      let isBasicValid = hasRequiredFields(['firstName', 'lastName', 'email', 'createdAt']) &&
+        isValidString(data.firstName, 1, 100) &&
+        isValidString(data.lastName, 1, 100) &&
+        isValidEmail(data.email) &&
+        (!('mobileCountryCode' in data) || isValidString(data.mobileCountryCode, 0, 10)) &&
+        (!('mobileNumber' in data) || isValidString(data.mobileNumber, 0, 20)) &&
+        (!('displayName' in data) || isValidString(data.displayName, 0, 100)) &&
+        (!('onboardingComplete' in data) || data.onboardingComplete is bool) &&
+        data.createdAt is timestamp;
+        
+      let isInterestsValid = !('interests' in data) || (data.interests is list && data.interests.size() <= 20);
+      return isBasicValid && isInterestsValid;
+    }
+
+    function isValidVisit(data) {
+      return hasRequiredFields(['poiName', 'placeId', 'lat', 'lng', 'timestamp']) &&
+        isValidString(data.poiName, 1, 200) &&
+        isValidString(data.placeId, 1, 200) &&
+        data.lat is number &&
+        data.lng is number &&
+        data.timestamp is timestamp &&
+        (!('narration' in data) || isValidString(data.narration, 0, 2000));
+    }
+
+    function isValidRoute(data) {
+      return hasRequiredFields(['startedAt', 'points']) &&
+        data.startedAt is timestamp &&
+        (!('endedAt' in data) || data.endedAt is timestamp) &&
+        isValidString(data.points, 2, 100000);
+    }
+
+    function isValidFavorite(data) {
+      return hasRequiredFields(['poiName', 'lat', 'lng', 'savedAt']) &&
+        isValidString(data.poiName, 1, 200) &&
+        data.lat is number &&
+        data.lng is number &&
+        data.savedAt is timestamp;
+    }
+
+    function isValidPOIGrid(data) {
+      return hasRequiredFields(['gridId', 'places', 'updatedAt']) &&
+        isValidString(data.gridId, 1, 50) &&
+        data.places is list &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTourRoute(data) {
+      return hasRequiredFields(['title', 'creatorId', 'createdAt', 'pois', 'type']) &&
+        isValidString(data.title, 1, 100) &&
+        isValidString(data.creatorId, 1, 128) &&
+        data.createdAt is timestamp &&
+        data.pois is list &&
+        data.pois.size() <= 50 &&
+        data.type in ['personalized', 'system'] &&
+        (!('description' in data) || isValidString(data.description, 0, 500)) &&
+        (!('isPublic' in data) || data.isPublic is bool);
+    }
+    
+    function isValidGroup(data) {
+      return hasRequiredFields(['name', 'creatorId', 'createdAt']) &&
+        isValidString(data.name, 1, 100) &&
+        isValidString(data.creatorId, 1, 128) &&
+        data.createdAt is timestamp &&
+        (!('description' in data) || isValidString(data.description, 0, 500));
+    }
+    
+    function isValidGroupMember(data) {
+      return hasRequiredFields(['userId', 'role', 'joinedAt']) &&
+        isValidString(data.userId, 1, 128) &&
+        isValidString(data.role, 1, 20) &&
+        data.role in ['admin', 'member'] &&
+        data.joinedAt is timestamp;
+    }
+
+    function isValidGroupTour(data) {
+      return hasRequiredFields(['groupId', 'routeId', 'creatorId', 'status']) &&
+        isValidString(data.groupId, 1, 128) &&
+        isValidString(data.routeId, 1, 128) &&
+        isValidString(data.creatorId, 1, 128) &&
+        isValidString(data.status, 1, 50) &&
+        (!('scheduledAt' in data) || data.scheduledAt is timestamp);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUserProfile(request.resource.data);
+      allow update: if isOwner(userId) && isValidUserProfile(request.resource.data) && isImmutable('createdAt') && isImmutable('email');
+      allow delete: if isOwner(userId);
+
+      match /visits/{visitId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidVisit(request.resource.data);
+        allow update: if isOwner(userId) && isValidVisit(request.resource.data) && isImmutable('timestamp') && isImmutable('placeId');
+        allow delete: if isOwner(userId);
+      }
+
+      match /routes/{routeId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidRoute(request.resource.data);
+        allow update: if isOwner(userId) && isValidRoute(request.resource.data) && isImmutable('startedAt');
+        allow delete: if isOwner(userId);
+      }
+
+      match /favorites/{placeId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidFavorite(request.resource.data);
+        allow update: if isOwner(userId) && isValidFavorite(request.resource.data) && isImmutable('savedAt');
+        allow delete: if isOwner(userId);
+      }
+      
+      match /api_usage/{dateId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    match /admins/{adminId} {
+      // A user may only check their OWN admin status from the client (used to
+      // show/hide the admin panel entry point). Granting/revoking admin is
+      // done out-of-band (Firebase console or Admin SDK) — never from the app.
+      allow read: if isOwner(adminId);
+      allow write: if false;
+    }
+
+    match /poi_grids/{gridId} {
+      // Anyone authenticated can read and write to the global POI cache
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidPOIGrid(request.resource.data);
+      allow update: if isAuthenticated() && isValidPOIGrid(request.resource.data) && isImmutable('gridId');
+    }
+
+    match /tour_routes/{routeId} {
+      allow read: if isAuthenticated() && (
+        (!('isPublic' in resource.data) || resource.data.isPublic == true) || 
+        resource.data.creatorId == request.auth.uid ||
+        resource.data.type == 'system'
+      );
+      allow create: if isAuthenticated() && 
+                    isValidTourRoute(request.resource.data) && 
+                    request.resource.data.creatorId == request.auth.uid &&
+                    (request.resource.data.type == 'personalized' || (request.resource.data.type == 'system' && isAdmin()));
+      allow update: if isAuthenticated() &&
+                    isValidTourRoute(request.resource.data) &&
+                    (resource.data.creatorId == request.auth.uid || isAdmin()) &&
+                    (request.resource.data.type == 'personalized' || (request.resource.data.type == 'system' && isAdmin())) &&
+                    isImmutable('creatorId') &&
+                    isImmutable('createdAt') &&
+                    isImmutable('type');
+      allow delete: if isAuthenticated() && (resource.data.creatorId == request.auth.uid || isAdmin());
+    }
+
+    match /groups/{groupId} {
+      allow read: if isAuthenticated() && exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+      allow create: if isAuthenticated() && 
+                    isValidGroup(request.resource.data) && 
+                    request.resource.data.creatorId == request.auth.uid;
+      allow update: if isAuthenticated() &&
+                    isValidGroup(request.resource.data) &&
+                    isImmutable('creatorId') &&
+                    isImmutable('createdAt') &&
+                    exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)) &&
+                    get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin';
+      allow delete: if isAuthenticated() && resource.data.creatorId == request.auth.uid;
+
+      match /members/{memberId} {
+        allow read: if isAuthenticated() && exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+        allow create: if isAuthenticated() && isValidGroupMember(request.resource.data) &&
+                      request.resource.data.userId == memberId &&
+                      (request.auth.uid == memberId || (
+                        exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)) &&
+                        get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin'
+                      ));
+        allow update: if isAuthenticated() && isValidGroupMember(request.resource.data) &&
+                      isImmutable('userId') && isImmutable('joinedAt') &&
+                      exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)) &&
+                      get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin';
+        allow delete: if isAuthenticated() && (request.auth.uid == memberId || (
+                        exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)) &&
+                        get(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid)).data.role == 'admin'
+                      ));
+      }
+    }
+
+    match /group_tours/{tourId} {
+      allow read: if isAuthenticated() && 
+                  exists(/databases/$(database)/documents/groups/$(resource.data.groupId)/members/$(request.auth.uid));
+      allow create: if isAuthenticated() &&
+                    isValidGroupTour(request.resource.data) &&
+                    request.resource.data.creatorId == request.auth.uid &&
+                    exists(/databases/$(database)/documents/groups/$(request.resource.data.groupId)/members/$(request.auth.uid)) &&
+                    get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)/members/$(request.auth.uid)).data.role == 'admin';
+      allow update: if isAuthenticated() &&
+                    isValidGroupTour(request.resource.data) &&
+                    isImmutable('creatorId') && isImmutable('groupId') &&
+                    exists(/databases/$(database)/documents/groups/$(resource.data.groupId)/members/$(request.auth.uid)) &&
+                    get(/databases/$(database)/documents/groups/$(resource.data.groupId)/members/$(request.auth.uid)).data.role == 'admin';
+      allow delete: if isAuthenticated() &&
+                    exists(/databases/$(database)/documents/groups/$(resource.data.groupId)/members/$(request.auth.uid)) &&
+                    get(/databases/$(database)/documents/groups/$(resource.data.groupId)/members/$(request.auth.uid)).data.role == 'admin';
+    }
+  }
+}

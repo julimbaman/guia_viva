@@ -1,0 +1,289 @@
+{
+  "entities": {
+    "POIGrid": {
+      "title": "POIGrid",
+      "description": "A cached grid of points of interest",
+      "type": "object",
+      "properties": {
+        "gridId": { "type": "string" },
+        "cityCode": { "type": "string" },
+        "transportMode": { "type": "string" },
+        "places": { "type": "array", "items": { "type": "object" } },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "cacheExpiresAt": { "type": "string", "format": "date-time" },
+        "lastRefreshedAt": { "type": "string", "format": "date-time" },
+        "refreshPriority": { "type": "number" }
+      },
+      "required": ["gridId", "places", "updatedAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile and travel preferences",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "mobileCountryCode": { "type": "string" },
+        "mobileNumber": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "photoUrl": { "type": "string" },
+        "preferredLanguage": { "type": "string" },
+        "preferredNarrationStyle": { "type": "string" },
+        "favoriteCategories": { "type": "array", "items": { "type": "string" } },
+        "homeCity": { "type": "string" },
+        "languagesSpoken": { "type": "array", "items": { "type": "string" } },
+        "ttsVoice": { "type": "string" },
+        "ttsSpeed": { "type": "number" },
+        "autoNarrate": { "type": "boolean" },
+        "notificationsEnabled": { "type": "boolean" },
+        "totalCitiesVisited": { "type": "number" },
+        "totalPOIsVisited": { "type": "number" },
+        "totalDistanceWalkedKm": { "type": "number" },
+        "memberSince": { "type": "string", "format": "date-time" },
+        "currentLocation": { "type": "object" },
+        "onboardingComplete": { "type": "boolean" }
+      },
+      "required": ["email", "firstName", "lastName"]
+    },
+    "LocationHistory": {
+      "title": "LocationHistory",
+      "description": "Significant location events",
+      "type": "object",
+      "properties": {
+        "eventType": { "type": "string" },
+        "cityCode": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["eventType", "timestamp"]
+    },
+    "Favorite": {
+      "title": "Favorite",
+      "description": "Saved POI",
+      "type": "object",
+      "properties": {
+        "poiId": { "type": "string" },
+        "savedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["poiId", "savedAt"]
+    },
+    "VisitedPOI": {
+      "title": "VisitedPOI",
+      "description": "A POI the user has heard narration for",
+      "type": "object",
+      "properties": {
+        "poiId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "rating": { "type": "number" }
+      },
+      "required": ["poiId", "timestamp"]
+    },
+    "UserTrip": {
+      "title": "UserTrip",
+      "description": "A coherent travel event",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "tripName": { "type": "string" },
+        "coverPhotoUrl": { "type": "string" },
+        "destinations": { "type": "array", "items": { "type": "object" } },
+        "status": { "type": "string" }
+      },
+      "required": ["userId", "tripName", "status"]
+    },
+    "TripStop": {
+      "title": "TripStop",
+      "description": "Individual POI visited during a trip",
+      "type": "object",
+      "properties": {
+        "poiId": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "narrationHeard": { "type": "string" },
+        "userNotes": { "type": "string" },
+        "photosTaken": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["latitude", "longitude", "timestamp"]
+    },
+    "CityIndex": {
+      "title": "CityIndex",
+      "description": "Master index of supported cities",
+      "type": "object",
+      "properties": {
+        "cityCode": { "type": "string" },
+        "cityName": { "type": "string" },
+        "country": { "type": "string" },
+        "continent": { "type": "string" },
+        "centerCoordinates": { "type": "object" },
+        "boundingBox": { "type": "object" },
+        "defaultZoomLevel": { "type": "number" },
+        "timezone": { "type": "string" },
+        "availableLanguages": { "type": "array", "items": { "type": "string" } },
+        "totalPOIs": { "type": "number" },
+        "featuredPOIIds": { "type": "array", "items": { "type": "string" } },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["cityCode", "cityName", "country"]
+    },
+    "POISuggestion": {
+      "title": "POISuggestion",
+      "description": "User or AI suggestion for a new POI",
+      "type": "object",
+      "properties": {
+        "suggestedBy": { "type": "string" },
+        "suggestedAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string" },
+        "location": { "type": "object" },
+        "proposedName": { "type": "string" },
+        "proposedTypes": { "type": "array", "items": { "type": "string" } },
+        "proposedDescription": { "type": "string" },
+        "votes": { "type": "number" },
+        "reviewedBy": { "type": "string" },
+        "reviewedAt": { "type": "string", "format": "date-time" },
+        "linkedPOIId": { "type": "string" }
+      },
+      "required": ["suggestedBy", "status", "location", "proposedName"]
+    },
+    "PlaceSuggestion": {
+      "title": "PlaceSuggestion",
+      "description": "Proactive suggestion of nearby attractions",
+      "type": "object",
+      "properties": {
+        "triggeredByUserId": { "type": "string" },
+        "triggeredAt": { "type": "string", "format": "date-time" },
+        "userCurrentLocation": { "type": "object" },
+        "suggestions": { "type": "array", "items": { "type": "object" } },
+        "wasAccepted": { "type": "boolean" },
+        "acceptedPlaceId": { "type": "string" }
+      },
+      "required": ["triggeredByUserId", "triggeredAt", "userCurrentLocation", "suggestions"]
+    },
+    "ApiUsage": {
+      "title": "ApiUsage",
+      "description": "Tracks daily API calls for rate limiting",
+      "type": "object",
+      "properties": {
+        "googlePlaces": { "type": "number" },
+        "openAI": { "type": "number" },
+        "lastCallAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["googlePlaces", "openAI"]
+    },
+    "TourRoute": {
+      "title": "TourRoute",
+      "description": "A curated set of POIs forming a route",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "pois": { "type": "array", "items": { "type": "object" } },
+        "isPublic": { "type": "boolean" },
+        "type": { "type": "string", "enum": ["personalized", "system"] }
+      },
+      "required": ["title", "creatorId", "createdAt", "pois", "type"]
+    },
+    "Group": {
+      "title": "Group",
+      "description": "A group of users",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "creatorId", "createdAt"]
+    },
+    "GroupMember": {
+      "title": "GroupMember",
+      "description": "A member of a group",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "role": { "type": "string" },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "role", "joinedAt"]
+    },
+    "GroupTour": {
+      "title": "GroupTour",
+      "description": "A vinculation of a group and a route",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "routeId": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "scheduledAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string" }
+      },
+      "required": ["groupId", "routeId", "creatorId", "status"]
+    }
+  },
+  "firestore": {
+    "/poi_grids/{gridId}": {
+      "schema": { "$ref": "#/entities/POIGrid" },
+      "description": "Global cache of POIs by geographic grid"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile document"
+    },
+    "/users/{userId}/location_history/{historyId}": {
+      "schema": { "$ref": "#/entities/LocationHistory" },
+      "description": "User's location history"
+    },
+    "/users/{userId}/favorites/{favoriteId}": {
+      "schema": { "$ref": "#/entities/Favorite" },
+      "description": "User's favorite places"
+    },
+    "/users/{userId}/visited_pois/{visitId}": {
+      "schema": { "$ref": "#/entities/VisitedPOI" },
+      "description": "POIs the user has heard narrations for"
+    },
+    "/user_trips/{tripId}": {
+      "schema": { "$ref": "#/entities/UserTrip" },
+      "description": "User's travel trips"
+    },
+    "/user_trips/{tripId}/trip_stops/{stopId}": {
+      "schema": { "$ref": "#/entities/TripStop" },
+      "description": "Stops within a trip"
+    },
+    "/city_index/{cityCode}": {
+      "schema": { "$ref": "#/entities/CityIndex" },
+      "description": "Master index of supported cities"
+    },
+    "/poi_suggestions/{suggestionId}": {
+      "schema": { "$ref": "#/entities/POISuggestion" },
+      "description": "Suggestions for new POIs"
+    },
+    "/place_suggestions/{suggestionId}": {
+      "schema": { "$ref": "#/entities/PlaceSuggestion" },
+      "description": "Proactive suggestions for users"
+    },
+    "/users/{userId}/api_usage/{dateId}": {
+      "schema": { "$ref": "#/entities/ApiUsage" },
+      "description": "Daily API usage tracking per user"
+    },
+    "/tour_routes/{routeId}": {
+      "schema": { "$ref": "#/entities/TourRoute" },
+      "description": "Tour routes containing POIs"
+    },
+    "/groups/{groupId}": {
+      "schema": { "$ref": "#/entities/Group" },
+      "description": "User groups"
+    },
+    "/groups/{groupId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/GroupMember" },
+      "description": "Members of a group"
+    },
+    "/group_tours/{tourId}": {
+      "schema": { "$ref": "#/entities/GroupTour" },
+      "description": "Tours assigned to groups"
+    }
+  }
+}
