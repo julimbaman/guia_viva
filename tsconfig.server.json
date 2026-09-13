@@ -8,5 +8,5 @@
     "skipLibCheck": true,
     "outDir": "dist/server"
   },
-  "include": ["server/**/*", "scripts/**/*"]
+  "include": ["server/**/*"]
 }
