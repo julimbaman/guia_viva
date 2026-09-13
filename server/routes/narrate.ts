@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import OpenAI from 'openai';
 import { isBudgetExceeded, recordOpenAICall, DAILY_BUDGET_USD } from '../costGuard.js';
+import { assertHeaderSafe } from '../envValidation.js';
 
 const router = Router();
 
@@ -35,6 +36,7 @@ router.post('/', async (req, res) => {
       res.status(500).json({ error: 'Missing AI API Key' });
       return;
     }
+    assertHeaderSafe(apiKey, 'OPENAI_API_KEY / GEMINI_API_KEY');
 
     // Use OpenAI if OPENAI_API_KEY is provided, otherwise fallback to Gemini via OpenAI compatibility layer
     const openai = new OpenAI({

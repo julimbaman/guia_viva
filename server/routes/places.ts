@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { isBudgetExceeded, recordGooglePlacesCall, DAILY_BUDGET_USD } from '../costGuard.js';
 import { resolveIncludedTypes, searchNearbyPlaces, generateNarrationsForPlaces } from '../placesService.js';
+import { assertHeaderSafe } from '../envValidation.js';
 
 const router = Router();
 
@@ -64,6 +65,7 @@ router.post('/search', async (req, res) => {
     if (!apiKey) {
       return res.status(500).json({ error: 'Missing Google Maps API Key' });
     }
+    assertHeaderSafe(apiKey, 'GOOGLE_PLACES_API_KEY / VITE_GOOGLE_MAPS_API_KEY');
 
     const url = 'https://places.googleapis.com/v1/places:searchText';
     const requestBody: any = {
@@ -121,6 +123,7 @@ router.post('/suggestions', async (req, res) => {
       console.warn('Missing Google Maps API Key for suggestions');
       return res.json({ places: [] });
     }
+    assertHeaderSafe(apiKey, 'GOOGLE_PLACES_API_KEY / VITE_GOOGLE_MAPS_API_KEY');
 
     const url = 'https://places.googleapis.com/v1/places:searchNearby';
     const includedTypes = resolveIncludedTypes(types);

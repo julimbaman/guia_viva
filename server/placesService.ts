@@ -4,6 +4,7 @@
 // shape of data (and respects the same cost guard) as a live user visit would.
 import OpenAI from 'openai';
 import { recordGooglePlacesCall, recordOpenAICall } from './costGuard.js';
+import { assertHeaderSafe } from './envValidation.js';
 
 export const INTEREST_TYPE_MAP: Record<string, string[]> = {
   'History': ['historical_landmark', 'museum', 'church'],
@@ -45,6 +46,7 @@ type SearchNearbyResult =
   | { ok: false; status: number; error: string };
 
 export async function searchNearbyPlaces({ lat, lng, radius, types, maxResultCount = 15, apiKey, fieldMask = RICH_FIELD_MASK }: SearchNearbyOptions): Promise<SearchNearbyResult> {
+  assertHeaderSafe(apiKey, 'GOOGLE_PLACES_API_KEY / VITE_GOOGLE_MAPS_API_KEY');
   const includedTypes = resolveIncludedTypes(types);
   const requestBody = {
     includedTypes: includedTypes.slice(0, 50),
@@ -92,6 +94,7 @@ export async function generateNarrationsForPlaces(places: any[], context: Narrat
   if (!openaiApiKey || places.length === 0) return {};
 
   try {
+    assertHeaderSafe(openaiApiKey, 'OPENAI_API_KEY / GEMINI_API_KEY');
     const openai = new OpenAI({
       apiKey: openaiApiKey,
       ...(process.env.OPENAI_API_KEY ? {} : { baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/' })
