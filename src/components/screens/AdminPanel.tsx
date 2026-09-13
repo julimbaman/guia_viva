@@ -231,7 +231,11 @@ function SitiosTab() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Failed to populate site');
+        // `details` carries the actual error.message from the server's catch
+        // block (see server/routes/admin.ts) — without it, every failure here
+        // just says "Internal server error" with no way to diagnose it
+        // remotely (there's no access to this environment's server logs).
+        setError([data.error, data.details].filter(Boolean).join(': ') || 'Failed to populate site');
         return;
       }
       setLastResult({ address: data.address, results: data.results });
