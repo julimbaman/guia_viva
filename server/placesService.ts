@@ -29,6 +29,16 @@ export function resolveIncludedTypes(types?: string[]): string[] {
   return includedTypes.length > 0 ? includedTypes : DEFAULT_TYPES;
 }
 
+const DEFAULT_EXCLUDED_TYPES = ['supermarket', 'grocery_store', 'convenience_store', 'liquor_store', 'car_repair', 'car_dealer', 'shopping_mall'];
+
+// Google rejects a searchNearby request outright if the same type appears in
+// both includedTypes and excludedTypes — so any excluded type a caller
+// explicitly asked to include (e.g. admin population wanting shopping_mall)
+// must be dropped from the exclusion list before sending the request.
+export function resolveExcludedTypes(includedTypes: string[]): string[] {
+  return DEFAULT_EXCLUDED_TYPES.filter(t => !includedTypes.includes(t));
+}
+
 const RICH_FIELD_MASK = 'places.id,places.displayName,places.formattedAddress,places.types,places.rating,places.userRatingCount,places.location,places.photos,places.editorialSummary,places.regularOpeningHours';
 
 interface SearchNearbyOptions {
@@ -48,9 +58,10 @@ type SearchNearbyResult =
 export async function searchNearbyPlaces({ lat, lng, radius, types, maxResultCount = 15, apiKey, fieldMask = RICH_FIELD_MASK }: SearchNearbyOptions): Promise<SearchNearbyResult> {
   assertHeaderSafe(apiKey, 'GOOGLE_PLACES_API_KEY / VITE_GOOGLE_MAPS_API_KEY');
   const includedTypes = resolveIncludedTypes(types);
+  const excludedTypes = resolveExcludedTypes(includedTypes);
   const requestBody = {
     includedTypes: includedTypes.slice(0, 50),
-    excludedTypes: ['supermarket', 'grocery_store', 'convenience_store', 'liquor_store', 'car_repair', 'car_dealer', 'shopping_mall'],
+    excludedTypes,
     maxResultCount,
     locationRestriction: {
       circle: {

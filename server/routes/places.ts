@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { isBudgetExceeded, recordGooglePlacesCall, DAILY_BUDGET_USD } from '../costGuard.js';
-import { resolveIncludedTypes, searchNearbyPlaces, generateNarrationsForPlaces } from '../placesService.js';
+import { resolveIncludedTypes, resolveExcludedTypes, searchNearbyPlaces, generateNarrationsForPlaces } from '../placesService.js';
 import { assertHeaderSafe, resolveEnvVar } from '../envValidation.js';
 
 const router = Router();
@@ -130,10 +130,11 @@ router.post('/suggestions', async (req, res) => {
 
     const url = 'https://places.googleapis.com/v1/places:searchNearby';
     const includedTypes = resolveIncludedTypes(types);
+    const excludedTypes = resolveExcludedTypes(includedTypes);
 
     const requestBody: any = {
       includedTypes: includedTypes.slice(0, 50),
-      excludedTypes: ['supermarket', 'grocery_store', 'convenience_store', 'liquor_store', 'car_repair', 'car_dealer', 'shopping_mall'],
+      excludedTypes,
       maxResultCount: 5,
       locationRestriction: {
         circle: {
