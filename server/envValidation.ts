@@ -7,6 +7,20 @@
 // gives zero hint it's the API key that's broken. This turns it into an
 // actionable message as early as possible, right where the key is about to
 // be used as a header.
+// Several routes accept an API key from more than one possible env var name
+// (e.g. GOOGLE_PLACES_API_KEY, falling back to VITE_GOOGLE_MAPS_API_KEY).
+// Reporting "GOOGLE_PLACES_API_KEY / VITE_GOOGLE_MAPS_API_KEY contains an
+// invalid character" leaves the reader guessing which ONE actually needs
+// fixing — this returns which specific name actually supplied the value, so
+// error messages (and assertHeaderSafe) can name it precisely.
+export function resolveEnvVar(names: string[]): { value: string; name: string } | null {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value) return { value, name };
+  }
+  return null;
+}
+
 export function assertHeaderSafe(value: string, label: string): void {
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i);

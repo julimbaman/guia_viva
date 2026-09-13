@@ -4,7 +4,7 @@
 // shape of data (and respects the same cost guard) as a live user visit would.
 import OpenAI from 'openai';
 import { recordGooglePlacesCall, recordOpenAICall } from './costGuard.js';
-import { assertHeaderSafe } from './envValidation.js';
+import { assertHeaderSafe, resolveEnvVar } from './envValidation.js';
 
 export const INTEREST_TYPE_MAP: Record<string, string[]> = {
   'History': ['historical_landmark', 'museum', 'church'],
@@ -90,16 +90,16 @@ interface NarrationContext {
 // call per place). Returns {} on any failure so callers can proceed without
 // pregenerated narrations rather than fail the whole request.
 export async function generateNarrationsForPlaces(places: any[], context: NarrationContext): Promise<Record<string, string>> {
-  const openaiApiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY;
-  if (!openaiApiKey || places.length === 0) return {};
+  const aiKey = resolveEnvVar(['OPENAI_API_KEY', 'GEMINI_API_KEY']);
+  if (!aiKey || places.length === 0) return {};
 
   try {
-    assertHeaderSafe(openaiApiKey, 'OPENAI_API_KEY / GEMINI_API_KEY');
+    assertHeaderSafe(aiKey.value, aiKey.name);
     const openai = new OpenAI({
-      apiKey: openaiApiKey,
-      ...(process.env.OPENAI_API_KEY ? {} : { baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/' })
+      apiKey: aiKey.value,
+      ...(aiKey.name === 'OPENAI_API_KEY' ? {} : { baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/' })
     });
-    const model = process.env.OPENAI_API_KEY ? (process.env.OPENAI_MODEL || 'gpt-4o') : 'gemini-2.5-pro';
+    const model = aiKey.name === 'OPENAI_API_KEY' ? (process.env.OPENAI_MODEL || 'gpt-4o') : 'gemini-2.5-pro';
 
     const placesContext = places.map((p: any) => ({
       id: p.id,

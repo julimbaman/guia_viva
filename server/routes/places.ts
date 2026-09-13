@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { isBudgetExceeded, recordGooglePlacesCall, DAILY_BUDGET_USD } from '../costGuard.js';
 import { resolveIncludedTypes, searchNearbyPlaces, generateNarrationsForPlaces } from '../placesService.js';
-import { assertHeaderSafe } from '../envValidation.js';
+import { assertHeaderSafe, resolveEnvVar } from '../envValidation.js';
 
 const router = Router();
 
@@ -20,13 +20,14 @@ router.post('/nearby', async (req, res) => {
       return res.status(429).json({ error: 'Daily API budget exceeded', budgetExceeded: true, limitUSD: DAILY_BUDGET_USD });
     }
 
-    const googleApiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
-    if (!googleApiKey) {
-      return res.status(500).json({ error: 'Missing Google Maps API Key' });
+    const googleKey = resolveEnvVar(['GOOGLE_PLACES_API_KEY', 'VITE_GOOGLE_MAPS_API_KEY']);
+    if (!googleKey) {
+      return res.status(500).json({ error: 'Missing Google Maps API Key (checked GOOGLE_PLACES_API_KEY, VITE_GOOGLE_MAPS_API_KEY)' });
     }
+    assertHeaderSafe(googleKey.value, googleKey.name);
 
     // 1. Fetch real places from Google Places API
-    const result = await searchNearbyPlaces({ lat, lng, radius, types, maxResultCount: 15, apiKey: googleApiKey });
+    const result = await searchNearbyPlaces({ lat, lng, radius, types, maxResultCount: 15, apiKey: googleKey.value });
     if (!result.ok) {
       console.error('Google Places API Error (Nearby):', result.status, result.error);
       return res.status(500).json({ error: 'Failed to fetch places from Google', details: result.error });
@@ -61,11 +62,12 @@ router.post('/search', async (req, res) => {
       return res.status(429).json({ error: 'Daily API budget exceeded', budgetExceeded: true, limitUSD: DAILY_BUDGET_USD, places: [] });
     }
 
-    const apiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Missing Google Maps API Key' });
+    const googleKey = resolveEnvVar(['GOOGLE_PLACES_API_KEY', 'VITE_GOOGLE_MAPS_API_KEY']);
+    if (!googleKey) {
+      return res.status(500).json({ error: 'Missing Google Maps API Key (checked GOOGLE_PLACES_API_KEY, VITE_GOOGLE_MAPS_API_KEY)' });
     }
-    assertHeaderSafe(apiKey, 'GOOGLE_PLACES_API_KEY / VITE_GOOGLE_MAPS_API_KEY');
+    assertHeaderSafe(googleKey.value, googleKey.name);
+    const apiKey = googleKey.value;
 
     const url = 'https://places.googleapis.com/v1/places:searchText';
     const requestBody: any = {
@@ -118,12 +120,13 @@ router.post('/suggestions', async (req, res) => {
       return res.status(429).json({ error: 'Daily API budget exceeded', budgetExceeded: true, limitUSD: DAILY_BUDGET_USD, places: [] });
     }
 
-    const apiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) {
+    const googleKey = resolveEnvVar(['GOOGLE_PLACES_API_KEY', 'VITE_GOOGLE_MAPS_API_KEY']);
+    if (!googleKey) {
       console.warn('Missing Google Maps API Key for suggestions');
       return res.json({ places: [] });
     }
-    assertHeaderSafe(apiKey, 'GOOGLE_PLACES_API_KEY / VITE_GOOGLE_MAPS_API_KEY');
+    assertHeaderSafe(googleKey.value, googleKey.name);
+    const apiKey = googleKey.value;
 
     const url = 'https://places.googleapis.com/v1/places:searchNearby';
     const includedTypes = resolveIncludedTypes(types);

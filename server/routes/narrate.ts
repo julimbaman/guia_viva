@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import OpenAI from 'openai';
 import { isBudgetExceeded, recordOpenAICall, DAILY_BUDGET_USD } from '../costGuard.js';
-import { assertHeaderSafe } from '../envValidation.js';
+import { assertHeaderSafe, resolveEnvVar } from '../envValidation.js';
 
 const router = Router();
 
@@ -30,18 +30,18 @@ router.post('/', async (req, res) => {
       question // Optional question from user
     } = req.body;
 
-    const apiKey = process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY;
-    
-    if (!apiKey) {
-      res.status(500).json({ error: 'Missing AI API Key' });
+    const aiKey = resolveEnvVar(['OPENAI_API_KEY', 'GEMINI_API_KEY']);
+
+    if (!aiKey) {
+      res.status(500).json({ error: 'Missing AI API Key (checked OPENAI_API_KEY, GEMINI_API_KEY)' });
       return;
     }
-    assertHeaderSafe(apiKey, 'OPENAI_API_KEY / GEMINI_API_KEY');
+    assertHeaderSafe(aiKey.value, aiKey.name);
 
     // Use OpenAI if OPENAI_API_KEY is provided, otherwise fallback to Gemini via OpenAI compatibility layer
     const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY,
-      ...(process.env.OPENAI_API_KEY ? {} : { baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/' })
+      apiKey: aiKey.value,
+      ...(aiKey.name === 'OPENAI_API_KEY' ? {} : { baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/' })
     });
 
     const model = process.env.OPENAI_API_KEY ? (process.env.OPENAI_MODEL || 'gpt-4o') : 'gemini-2.5-pro';

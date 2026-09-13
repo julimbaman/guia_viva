@@ -9,6 +9,7 @@ import { requireAdmin, checkAdminStatus, type AdminRequest } from '../adminAuth.
 import { adminDb } from '../firebaseAdmin.js';
 import { isBudgetExceeded } from '../costGuard.js';
 import { searchNearbyPlaces, generateNarrationsForPlaces, sanitizePlacesForStorage } from '../placesService.js';
+import { assertHeaderSafe, resolveEnvVar } from '../envValidation.js';
 
 const router = Router();
 
@@ -79,8 +80,9 @@ router.post('/populate-site', async (req: AdminRequest, res) => {
       resolvedAddress = geocoded.formattedAddress;
     }
 
-    const apiKey = process.env.GOOGLE_PLACES_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: 'Missing Google Maps API Key' });
+    const googleKey = resolveEnvVar(['GOOGLE_PLACES_API_KEY', 'VITE_GOOGLE_MAPS_API_KEY']);
+    if (!googleKey) return res.status(500).json({ error: 'Missing Google Maps API Key (checked GOOGLE_PLACES_API_KEY, VITE_GOOGLE_MAPS_API_KEY)' });
+    assertHeaderSafe(googleKey.value, googleKey.name);
 
     const results: any[] = [];
 
@@ -91,7 +93,7 @@ router.post('/populate-site', async (req: AdminRequest, res) => {
       }
 
       const search = await searchNearbyPlaces({
-        lat, lng, radius, apiKey,
+        lat, lng, radius, apiKey: googleKey.value,
         types: types && types.length ? types : ADMIN_DEFAULT_TYPES,
         maxResultCount: 20
       });
