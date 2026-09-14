@@ -33,22 +33,46 @@ router.get('/status', async (req, res) => {
 
 router.use(requireAdmin);
 
-// Broader than the runtime interest defaults (History/Culture/...) since this
-// is a deliberate, one-time curation pass meant to cover "restaurantes,
-// museos, sitios de interés, parques famosos, etc." in one go.
-const ADMIN_DEFAULT_TYPES = [
-  'restaurant', 'cafe', 'bakery', 'museum', 'art_gallery', 'tourist_attraction',
-  'historical_landmark', 'park', 'church', 'night_club', 'bar', 'shopping_mall'
+// A single Nearby Search call caps out at 20 results, and mixing many types
+// into one call lets Google's ranking crowd out whole categories (e.g. all
+// 20 slots going to restaurants, zero to parks). Grouped, targeted calls —
+// one per category — guarantee variety across "restaurantes, iglesias,
+// museos, parques, centros comerciales, etc." and let a single populate
+// pass realistically gather 30+ distinct POIs once merged. Each group is
+// one Google Places call (tracked/gated by the same daily cost guard as
+// everything else). Used as the default when the admin doesn't pass custom
+// `types` — a custom list is still honored as a single group/call.
+const CATEGORY_GROUPS: string[][] = [
+  ['restaurant', 'cafe', 'bakery', 'ice_cream_shop'],
+  ['church', 'museum', 'art_gallery', 'tourist_attraction', 'historical_landmark'],
+  ['park', 'shopping_mall']
 ];
 
 // The app only ever reads two grid documents per coordinate — see getGridId()
 // in src/hooks/usePlaces.ts: radius <=1000 resolves to a "walking" grid,
 // >1000 to a "vehicle" grid. Populating both means the site is covered
-// whether a visitor arrives on foot or by car.
+// whether a visitor arrives on foot or by car. The "walking" grid is also
+// shared by the app's stationary (200m) and running (1000m) modes — see
+// getSearchRadius() in src/utils/movement.ts — so it's searched at the full
+// 1000m a visitor in ANY of those three modes could request, not just the
+// 500m a walker typically uses.
 const GRID_MODES: { mode: 'walking' | 'vehicle'; radius: number }[] = [
-  { mode: 'walking', radius: 500 },
+  { mode: 'walking', radius: 1000 },
   { mode: 'vehicle', radius: 2000 }
 ];
+
+// Ranks places with a photo first (so the first ones stored — which become
+// the horizontally-scrollable "suggestions" cards in Active.tsx — actually
+// have something to show), then by rating, so a rich pool of 30+ candidates
+// leads with the most appealing ones rather than in Google's raw response order.
+function rankPlaces(places: any[]): any[] {
+  return [...places].sort((a, b) => {
+    const aHasPhoto = (a.photos?.length || 0) > 0 ? 1 : 0;
+    const bHasPhoto = (b.photos?.length || 0) > 0 ? 1 : 0;
+    if (aHasPhoto !== bHasPhoto) return bHasPhoto - aHasPhoto;
+    return (b.rating || 0) - (a.rating || 0);
+  });
+}
 
 async function geocodeAddress(address: string): Promise<{ lat: number; lng: number; formattedAddress: string } | null> {
   const apiKey = process.env.GOOGLE_GEOCODING_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -86,24 +110,36 @@ router.post('/populate-site', async (req: AdminRequest, res) => {
 
     const results: any[] = [];
 
+    const groups = types && types.length ? [types] : CATEGORY_GROUPS;
+
     for (const { mode, radius } of GRID_MODES) {
       if (isBudgetExceeded()) {
         results.push({ mode, radius, skipped: true, reason: 'Daily API budget exceeded' });
         continue;
       }
 
-      const search = await searchNearbyPlaces({
-        lat, lng, radius, apiKey: googleKey.value,
-        types: types && types.length ? types : ADMIN_DEFAULT_TYPES,
-        maxResultCount: 20
-      });
+      // Run each category group as its own call and merge by place ID —
+      // this is what actually gets past the 20-result-per-call ceiling.
+      const byId = new Map<string, any>();
+      let lastGroupError: string | null = null;
+      for (const group of groups) {
+        if (isBudgetExceeded()) break;
+        const search = await searchNearbyPlaces({ lat, lng, radius, apiKey: googleKey.value, types: group, maxResultCount: 20 });
+        if (!search.ok) {
+          lastGroupError = search.error;
+          continue;
+        }
+        for (const p of search.places) {
+          if (!byId.has(p.id)) byId.set(p.id, p);
+        }
+      }
 
-      if (!search.ok) {
-        results.push({ mode, radius, error: search.error });
+      if (byId.size === 0) {
+        results.push({ mode, radius, error: lastGroupError || 'No places found' });
         continue;
       }
 
-      let places = search.places;
+      let places = rankPlaces(Array.from(byId.values()));
       if (places.length > 0 && !isBudgetExceeded()) {
         const narrations = await generateNarrationsForPlaces(places.slice(0, 10), { lat, lng, zoneName: cityCode });
         places = places.map((p: any) => ({ ...p, pregeneratedNarration: narrations[p.id] || null }));
