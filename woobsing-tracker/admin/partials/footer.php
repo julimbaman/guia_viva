@@ -1,3 +1,0 @@
-</div><!-- /wrap -->
-</body>
-</html>

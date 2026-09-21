@@ -1,8 +1,0 @@
-# Scripts de uso exclusivo por CLI (además cada uno verifica php_sapi_name()==='cli').
-<IfModule mod_authz_core.c>
-  Require all denied
-</IfModule>
-<IfModule !mod_authz_core.c>
-  Order allow,deny
-  Deny from all
-</IfModule>
