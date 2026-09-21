@@ -1,0 +1,4 @@
+config.php
+clicks.log
+*.log
+.DS_Store
